@@ -1,7 +1,7 @@
 import React, { useState, useEffect, } from 'react';
 import './DenpouApp.css';
 
-const API_BASE = 'http://localhost:8080/api';
+const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8080/api';
 
 const DenpouApp = () => {
   const [appState, setAppState] = useState('setup'); // setup, game, result
