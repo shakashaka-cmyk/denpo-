@@ -64,7 +64,7 @@ const DenpouApp = () => {
     }
 
     try {
-      const response = await fetch(
+      await fetch(
         `${API_BASE}/games/${game.gameId}/rounds/${currentRound + 1}/start`,
         {
           method: 'POST',
@@ -120,7 +120,7 @@ const DenpouApp = () => {
     }
 
     try {
-      const response = await fetch(
+      await fetch(
         `${API_BASE}/games/${game.gameId}/rounds/${currentRound + 1}/answer`,
         {
           method: 'POST',
