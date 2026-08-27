@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, } from 'react';
 import './DenpouApp.css';
 
 const API_BASE = 'http://localhost:8080/api';
 
 const DenpouApp = () => {
   const [appState, setAppState] = useState('setup'); // setup, game, result
-  const [players, setPlayers] = useState([]);
   const [playerNames, setPlayerNames] = useState(['', '', '', '']);
   const [game, setGame] = useState(null);
   const [currentRound, setCurrentRound] = useState(0);
@@ -76,7 +75,6 @@ const DenpouApp = () => {
           body: JSON.stringify({ answer }),
         }
       );
-      const round = await response.json();
       setGamePhase('hint_phase');
       setAnswer('');
       setHints([]);
@@ -133,7 +131,6 @@ const DenpouApp = () => {
           body: JSON.stringify({ answer }),
         }
       );
-      const result = await response.json();
       setGamePhase('finished');
       setAnswer('');
     } catch (err) {
