@@ -300,11 +300,11 @@ func main() {
 	r := mux.NewRouter()
 
 	// API エンドポイント
-	r.HandleFunc("/api/games", CreateGame).Methods("POST")
-	r.HandleFunc("/api/games/{gameId}", GetGame).Methods("GET")
-	r.HandleFunc("/api/games/{gameId}/rounds/{roundNumber}/start", StartRound).Methods("POST")
-	r.HandleFunc("/api/games/{gameId}/rounds/{roundNumber}/hints", SubmitHint).Methods("POST")
-	r.HandleFunc("/api/games/{gameId}/rounds/{roundNumber}/answer", SubmitAnswer).Methods("POST")
+	r.HandleFunc("/api/games", CreateGame).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/games/{gameId}", GetGame).Methods("GET", "OPTIONS")
+	r.HandleFunc("/api/games/{gameId}/rounds/{roundNumber}/start", StartRound).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/games/{gameId}/rounds/{roundNumber}/hints", SubmitHint).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/games/{gameId}/rounds/{roundNumber}/answer", SubmitAnswer).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}/ws", WebSocketHandler)
 
 	// ヘルスチェック
@@ -316,32 +316,20 @@ func main() {
 	// CORS対応
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			allowedOrigins := []string{
-				"https://denpo-ten.vercel.app",
-				"https://denpou-game.vercel.app",
-				"http://localhost:3000",
-				"http://localhost:8080",
-			}
-
-			origin := r.Header.Get("Origin")
-			for _, allowed := range allowedOrigins {
-				if origin == allowed {
-					w.Header().Set("Access-Control-Allow-Origin", origin)
-					break
-				}
-			}
-
+			w.Header().Set("Access-Control-Allow-Origin", "https://denpo-ten.vercel.app")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Player-ID")
+			w.Header().Set("Access-Control-Max-Age", "86400")
+
 			if r.Method == "OPTIONS" {
 				w.WriteHeader(http.StatusOK)
 				return
 			}
+
 			next.ServeHTTP(w, r)
 		})
 	})
 
-	// ポート
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
