@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -306,6 +307,12 @@ func main() {
 	r.HandleFunc("/api/games/{gameId}/rounds/{roundNumber}/answer", SubmitAnswer).Methods("POST")
 	r.HandleFunc("/api/games/{gameId}/ws", WebSocketHandler)
 
+	// ヘルスチェック
+	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}).Methods("GET")
+
 	// CORS対応
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -334,5 +341,11 @@ func main() {
 		})
 	})
 
-	http.ListenAndServe(":8080", r)
+	// ポート
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	http.ListenAndServe(":"+port, r)
 }
