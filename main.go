@@ -12,29 +12,29 @@ import (
 )
 
 type Game struct {
-	GameID    string       `json:"gameId"`
-	Players   []Player     `json:"players"`
-	Rounds    []Round      `json:"rounds"`
-	Status    string       `json:"status"` // "waiting", "playing", "finished"
-	CreatedAt time.Time    `json:"createdAt"`
+	GameID    string    `json:"gameId"`
+	Players   []Player  `json:"players"`
+	Rounds    []Round   `json:"rounds"`
+	Status    string    `json:"status"` // "waiting", "playing", "finished"
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 type Player struct {
-	PlayerID  string `json:"playerId"`
-	Name      string `json:"name"`
+	PlayerID   string `json:"playerId"`
+	Name       string `json:"name"`
 	TotalScore int    `json:"totalScore"`
 }
 
 type Round struct {
-	RoundNumber   int         `json:"roundNumber"`
-	ParentID      string      `json:"parentId"`
-	Answer        string      `json:"answer"`
-	Status        string      `json:"status"` // "hint_phase", "answering", "finished"
-	Hints         []Hint      `json:"hints"`
-	CorrectAnswer bool        `json:"correctAnswer"`
+	RoundNumber   int            `json:"roundNumber"`
+	ParentID      string         `json:"parentId"`
+	Answer        string         `json:"answer"`
+	Status        string         `json:"status"` // "hint_phase", "answering", "finished"
+	Hints         []Hint         `json:"hints"`
+	CorrectAnswer bool           `json:"correctAnswer"`
 	Scores        map[string]int `json:"scores"`
-	CreatedAt     time.Time   `json:"createdAt"`
-	AnsweredAt    *time.Time  `json:"answeredAt"`
+	CreatedAt     time.Time      `json:"createdAt"`
+	AnsweredAt    *time.Time     `json:"answeredAt"`
 }
 
 type Hint struct {
@@ -75,9 +75,9 @@ func CreateGame(w http.ResponseWriter, r *http.Request) {
 			Name string `json:"name"`
 		} `json:"players"`
 	}
-	
+
 	json.NewDecoder(r.Body).Decode(&req)
-	
+
 	gameID := uuid.New().String()
 	game := &Game{
 		GameID:    gameID,
@@ -86,14 +86,14 @@ func CreateGame(w http.ResponseWriter, r *http.Request) {
 		Status:    "waiting",
 		CreatedAt: time.Now(),
 	}
-	
+
 	for i, p := range req.Players {
 		game.Players = append(game.Players, Player{
 			PlayerID:   uuid.New().String(),
 			Name:       p.Name,
 			TotalScore: 0,
 		})
-		
+
 		// 各プレイヤーが親として2回担当するラウンドを作成
 		for j := 0; j < 2; j++ {
 			game.Rounds = append(game.Rounds, Round{
@@ -106,7 +106,7 @@ func CreateGame(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
-	
+
 	games[gameID] = game
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(game)
@@ -116,13 +116,13 @@ func CreateGame(w http.ResponseWriter, r *http.Request) {
 func GetGame(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	gameID := vars["gameId"]
-	
+
 	game, ok := games[gameID]
 	if !ok {
 		http.Error(w, "Game not found", http.StatusNotFound)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(game)
 }
@@ -131,19 +131,18 @@ func GetGame(w http.ResponseWriter, r *http.Request) {
 func StartRound(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	gameID := vars["gameId"]
-	roundNumber := vars["roundNumber"]
-	
+
 	var req struct {
 		Answer string `json:"answer"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
-	
+
 	game, ok := games[gameID]
 	if !ok {
 		http.Error(w, "Game not found", http.StatusNotFound)
 		return
 	}
-	
+
 	// ラウンド番号でラウンドを検索
 	var round *Round
 	for i := range game.Rounds {
@@ -152,15 +151,15 @@ func StartRound(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	
+
 	if round == nil {
 		http.Error(w, "Round not found", http.StatusNotFound)
 		return
 	}
-	
+
 	round.Answer = req.Answer
 	round.Status = "hint_phase"
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(round)
 }
@@ -169,17 +168,16 @@ func StartRound(w http.ResponseWriter, r *http.Request) {
 func SubmitHint(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	gameID := vars["gameId"]
-	roundNumber := vars["roundNumber"]
-	
+
 	var req HintRequest
 	json.NewDecoder(r.Body).Decode(&req)
-	
+
 	game, ok := games[gameID]
 	if !ok {
 		http.Error(w, "Game not found", http.StatusNotFound)
 		return
 	}
-	
+
 	// ラウンドを探す
 	var round *Round
 	for i := range game.Rounds {
@@ -188,12 +186,12 @@ func SubmitHint(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	
+
 	if round == nil {
 		http.Error(w, "Round not found", http.StatusNotFound)
 		return
 	}
-	
+
 	hint := Hint{
 		PlayerID:  r.Header.Get("X-Player-ID"),
 		Text:      req.Text,
@@ -201,12 +199,12 @@ func SubmitHint(w http.ResponseWriter, r *http.Request) {
 		Order:     len(round.Hints) + 1,
 		CreatedAt: time.Now(),
 	}
-	
+
 	round.Hints = append(round.Hints, hint)
-	
+
 	// スコアを計算
 	hint.Score = calculateScore(hint.CharCount, hint.Order)
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(hint)
 }
@@ -215,17 +213,16 @@ func SubmitHint(w http.ResponseWriter, r *http.Request) {
 func SubmitAnswer(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	gameID := vars["gameId"]
-	roundNumber := vars["roundNumber"]
-	
+
 	var req AnswerRequest
 	json.NewDecoder(r.Body).Decode(&req)
-	
+
 	game, ok := games[gameID]
 	if !ok {
 		http.Error(w, "Game not found", http.StatusNotFound)
 		return
 	}
-	
+
 	// ラウンドを探す
 	var round *Round
 	for i := range game.Rounds {
@@ -234,31 +231,31 @@ func SubmitAnswer(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	
+
 	if round == nil {
 		http.Error(w, "Round not found", http.StatusNotFound)
 		return
 	}
-	
+
 	playerID := r.Header.Get("X-Player-ID")
 	now := time.Now()
 	round.AnsweredAt = &now
-	
+
 	// 正解判定
 	if req.Answer == round.Answer {
 		round.CorrectAnswer = true
 		round.Status = "finished"
-		
+
 		// 親と解答者に同じスコアを付与
 		score := 0
 		if len(round.Hints) > 0 {
 			lastHint := round.Hints[len(round.Hints)-1]
 			score = calculateScore(lastHint.CharCount, lastHint.Order)
 		}
-		
+
 		round.Scores[round.ParentID] = score
 		round.Scores[playerID] = score
-		
+
 		// 総スコアを更新
 		for i, player := range game.Players {
 			if player.PlayerID == round.ParentID || player.PlayerID == playerID {
@@ -266,7 +263,7 @@ func SubmitAnswer(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(round)
 }
@@ -275,19 +272,19 @@ func SubmitAnswer(w http.ResponseWriter, r *http.Request) {
 func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	gameID := vars["gameId"]
-	
+
 	game, ok := games[gameID]
 	if !ok {
 		http.Error(w, "Game not found", http.StatusNotFound)
 		return
 	}
-	
+
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
 	defer ws.Close()
-	
+
 	// ゲーム状態をブロードキャスト
 	for {
 		err := ws.WriteJSON(game)
@@ -300,7 +297,7 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	r := mux.NewRouter()
-	
+
 	// API エンドポイント
 	r.HandleFunc("/api/games", CreateGame).Methods("POST")
 	r.HandleFunc("/api/games/{gameId}", GetGame).Methods("GET")
@@ -308,7 +305,7 @@ func main() {
 	r.HandleFunc("/api/games/{gameId}/rounds/{roundNumber}/hints", SubmitHint).Methods("POST")
 	r.HandleFunc("/api/games/{gameId}/rounds/{roundNumber}/answer", SubmitAnswer).Methods("POST")
 	r.HandleFunc("/api/games/{gameId}/ws", WebSocketHandler)
-	
+
 	// CORS対応
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -322,6 +319,6 @@ func main() {
 			next.ServeHTTP(w, r)
 		})
 	})
-	
+
 	http.ListenAndServe(":8080", r)
 }
