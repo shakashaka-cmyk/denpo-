@@ -309,7 +309,21 @@ func main() {
 	// CORS対応
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
+			allowedOrigins := []string{
+				"https://denpo-ten.vercel.app",
+				"https://denpou-game.vercel.app",
+				"http://localhost:3000",
+				"http://localhost:8080",
+			}
+
+			origin := r.Header.Get("Origin")
+			for _, allowed := range allowedOrigins {
+				if origin == allowed {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					break
+				}
+			}
+
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Player-ID")
 			if r.Method == "OPTIONS" {
