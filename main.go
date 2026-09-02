@@ -14,17 +14,18 @@ import (
 )
 
 type Game struct {
-	GameID    string    `json:"gameId"`
-	Players   []Player  `json:"players"`
-	Rounds    []Round   `json:"rounds"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"createdAt"`
+	GameID    string       `json:"gameId"`
+	Players   []Player     `json:"players"`
+	Rounds    []Round      `json:"rounds"`
+	Status    string       `json:"status"`
+	CreatedAt time.Time    `json:"createdAt"`
 }
 
 type Player struct {
 	PlayerID   string `json:"playerId"`
 	Name       string `json:"name"`
 	TotalScore int    `json:"totalScore"`
+	IsKicked   bool   `json:"isKicked"`
 }
 
 type Round struct {
@@ -48,19 +49,12 @@ type Hint struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-type AnswerRequest struct {
-	Answer string `json:"answer"`
-}
-
-type HintRequest struct {
-	Text string `json:"text"`
-}
-
 type GameRoom struct {
-	Game      *Game
-	Clients   map[*websocket.Conn]bool
-	Broadcast chan interface{}
-	Mu        sync.RWMutex
+	Game           *Game
+	Clients        map[*websocket.Conn]bool
+	Broadcast      chan interface{}
+	Mu             sync.RWMutex
+	LastActiveTime map[string]time.Time
 }
 
 var (
@@ -79,6 +73,7 @@ func calculateScore(charCount, order int) int {
 	return 18 - int(math.Ceil(divisor))
 }
 
+// CreateGame - 待機部屋を作成
 func CreateGame(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Players []struct {
@@ -97,29 +92,20 @@ func CreateGame(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: time.Now(),
 	}
 
-	for i, p := range req.Players {
+	for _, p := range req.Players {
 		game.Players = append(game.Players, Player{
 			PlayerID:   uuid.New().String(),
 			Name:       p.Name,
 			TotalScore: 0,
+			IsKicked:   false,
 		})
-
-		for j := 0; j < 2; j++ {
-			game.Rounds = append(game.Rounds, Round{
-				RoundNumber: len(game.Rounds) + 1,
-				ParentID:    game.Players[i].PlayerID,
-				Status:      "waiting",
-				Hints:       []Hint{},
-				Scores:      make(map[string]int),
-				CreatedAt:   time.Now(),
-			})
-		}
 	}
 
 	room := &GameRoom{
-		Game:      game,
-		Clients:   make(map[*websocket.Conn]bool),
-		Broadcast: make(chan interface{}, 10),
+		Game:           game,
+		Clients:        make(map[*websocket.Conn]bool),
+		Broadcast:      make(chan interface{}, 10),
+		LastActiveTime: make(map[string]time.Time),
 	}
 
 	roomsMu.Lock()
@@ -133,6 +119,7 @@ func CreateGame(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(game)
 }
 
+// GetGame - ゲーム情報を取得
 func GetGame(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	gameID := vars["gameId"]
@@ -150,6 +137,113 @@ func GetGame(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(room.Game)
 }
 
+// StartGame - ゲームを開始（待機部屋から本ゲームへ）
+func StartGame(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	gameID := vars["gameId"]
+
+	roomsMu.RLock()
+	room, ok := rooms[gameID]
+	roomsMu.RUnlock()
+
+	if !ok {
+		http.Error(w, "Game not found", http.StatusNotFound)
+		return
+	}
+
+	room.Mu.Lock()
+	defer room.Mu.Unlock()
+
+	if room.Game.Status != "waiting" {
+		http.Error(w, "Game already started", http.StatusBadRequest)
+		return
+	}
+
+	// プレイヤーごとにラウンドを作成
+	room.Game.Rounds = []Round{}
+	for i, player := range room.Game.Players {
+		if player.IsKicked {
+			continue
+		}
+		for j := 0; j < 2; j++ {
+			room.Game.Rounds = append(room.Game.Rounds, Round{
+				RoundNumber: len(room.Game.Rounds) + 1,
+				ParentID:    room.Game.Players[i].PlayerID,
+				Status:      "waiting",
+				Hints:       []Hint{},
+				Scores:      make(map[string]int),
+				CreatedAt:   time.Now(),
+			})
+		}
+	}
+
+	room.Game.Status = "playing"
+	room.Broadcast <- room.Game
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(room.Game)
+}
+
+// KickPlayer - プレイヤーをキック
+func KickPlayer(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	gameID := vars["gameId"]
+
+	var req struct {
+		PlayerID string `json:"playerId"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	roomsMu.RLock()
+	room, ok := rooms[gameID]
+	roomsMu.RUnlock()
+
+	if !ok {
+		http.Error(w, "Game not found", http.StatusNotFound)
+		return
+	}
+
+	room.Mu.Lock()
+	defer room.Mu.Unlock()
+
+	for i, player := range room.Game.Players {
+		if player.PlayerID == req.PlayerID {
+			room.Game.Players[i].IsKicked = true
+			room.Broadcast <- room.Game
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"status": "kicked"})
+			return
+		}
+	}
+
+	http.Error(w, "Player not found", http.StatusNotFound)
+}
+
+// EndGame - ゲームを終了
+func EndGame(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	gameID := vars["gameId"]
+
+	roomsMu.RLock()
+	room, ok := rooms[gameID]
+	roomsMu.RUnlock()
+
+	if !ok {
+		http.Error(w, "Game not found", http.StatusNotFound)
+		return
+	}
+
+	room.Mu.Lock()
+	defer room.Mu.Unlock()
+
+	room.Game.Status = "finished"
+	room.Broadcast <- room.Game
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(room.Game)
+}
+
+// StartRound - ラウンドを開始
 func StartRound(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	gameID := vars["gameId"]
@@ -175,6 +269,7 @@ func StartRound(w http.ResponseWriter, r *http.Request) {
 		if room.Game.Rounds[i].Status == "waiting" {
 			room.Game.Rounds[i].Answer = req.Answer
 			room.Game.Rounds[i].Status = "hint_phase"
+
 			room.Broadcast <- room.Game
 
 			w.Header().Set("Content-Type", "application/json")
@@ -186,11 +281,14 @@ func StartRound(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "No waiting round found", http.StatusNotFound)
 }
 
+// SubmitHint - ヒントを投稿
 func SubmitHint(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	gameID := vars["gameId"]
 
-	var req HintRequest
+	var req struct {
+		Text string `json:"text"`
+	}
 	json.NewDecoder(r.Body).Decode(&req)
 
 	roomsMu.RLock()
@@ -217,6 +315,7 @@ func SubmitHint(w http.ResponseWriter, r *http.Request) {
 
 			hint.Score = calculateScore(hint.CharCount, hint.Order)
 			room.Game.Rounds[i].Hints = append(room.Game.Rounds[i].Hints, hint)
+
 			room.Broadcast <- room.Game
 
 			w.Header().Set("Content-Type", "application/json")
@@ -228,11 +327,14 @@ func SubmitHint(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "No active hint phase found", http.StatusNotFound)
 }
 
+// SubmitAnswer - 解答を投稿
 func SubmitAnswer(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	gameID := vars["gameId"]
 
-	var req AnswerRequest
+	var req struct {
+		Answer string `json:"answer"`
+	}
 	json.NewDecoder(r.Body).Decode(&req)
 
 	roomsMu.RLock()
@@ -291,6 +393,7 @@ func SubmitAnswer(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "No active round found", http.StatusNotFound)
 }
 
+// WebSocketHandler - WebSocket接続
 func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	gameID := vars["gameId"]
@@ -309,8 +412,11 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	playerID := r.Header.Get("X-Player-ID")
+
 	room.Mu.Lock()
 	room.Clients[ws] = true
+	room.LastActiveTime[playerID] = time.Now()
 	room.Mu.Unlock()
 
 	ws.WriteJSON(room.Game)
@@ -326,12 +432,19 @@ func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 		for {
 			_, _, err := ws.ReadMessage()
 			if err != nil {
+				room.Mu.Lock()
+				room.LastActiveTime[playerID] = time.Now()
+				room.Mu.Unlock()
 				break
 			}
+			room.Mu.Lock()
+			room.LastActiveTime[playerID] = time.Now()
+			room.Mu.Unlock()
 		}
 	}()
 }
 
+// broadcastLoop - ブロードキャスト
 func (room *GameRoom) broadcastLoop() {
 	for msg := range room.Broadcast {
 		room.Mu.RLock()
@@ -353,6 +466,7 @@ func (room *GameRoom) broadcastLoop() {
 	}
 }
 
+// HealthCheck
 func HealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -364,6 +478,9 @@ func main() {
 	r.HandleFunc("/health", HealthCheck).Methods("GET")
 	r.HandleFunc("/api/games", CreateGame).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}", GetGame).Methods("GET", "OPTIONS")
+	r.HandleFunc("/api/games/{gameId}/start", StartGame).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/games/{gameId}/end", EndGame).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/games/{gameId}/kick", KickPlayer).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}/rounds/start", StartRound).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}/hints", SubmitHint).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}/answer", SubmitAnswer).Methods("POST", "OPTIONS")

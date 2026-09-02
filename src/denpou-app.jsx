@@ -15,8 +15,10 @@ const DenpouApp = () => {
   const [, setWs] = useState(null);
   const [joinGameID, setJoinGameID] = useState('');
   const [playerName, setPlayerName] = useState('');
+  const [isParent, setIsParent] = useState(false);
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
 
-  // WebSocket接続
+  // WebSocket接続 + 再接続
   useEffect(() => {
     if (gameID && playerID) {
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -26,10 +28,26 @@ const DenpouApp = () => {
       try {
         const websocket = new WebSocket(wsURL);
 
+        websocket.onopen = () => {
+          setReconnectAttempts(0);
+          websocket.setRequestHeader('X-Player-ID', playerID);
+        };
+
         websocket.onmessage = (event) => {
           try {
             const updatedGame = JSON.parse(event.data);
             setGame(updatedGame);
+
+            // キックされたか確認
+            const currentPlayer = updatedGame.players.find(p => p.playerId === playerID);
+            if (currentPlayer && currentPlayer.isKicked) {
+              setErrorMsg('このゲームからキックされました');
+              setTimeout(() => {
+                setAppState('lobby');
+                setGameID(null);
+                setPlayerID(null);
+              }, 2000);
+            }
           } catch (e) {
             console.error('WebSocket parse error:', e);
           }
@@ -37,6 +55,15 @@ const DenpouApp = () => {
 
         websocket.onerror = (error) => {
           console.error('WebSocket error:', error);
+        };
+
+        websocket.onclose = () => {
+          // 再接続試行（5分以内）
+          if (reconnectAttempts < 30) {
+            setTimeout(() => {
+              setReconnectAttempts(reconnectAttempts + 1);
+            }, 10000);
+          }
         };
 
         setWs(websocket);
@@ -50,9 +77,9 @@ const DenpouApp = () => {
         console.error('WebSocket connection error:', e);
       }
     }
-  }, [gameID, playerID]);
+  }, [gameID, playerID, reconnectAttempts]);
 
-  // ゲーム作成（親だけ）
+  // ゲーム作成（待機部屋）
   const createGame = async () => {
     if (!parentName.trim()) {
       setErrorMsg('名前を入力してください');
@@ -69,7 +96,8 @@ const DenpouApp = () => {
       
       setGameID(gameData.gameId);
       setPlayerID(gameData.players[0].playerId);
-      setAppState('game');
+      setIsParent(true);
+      setAppState('waiting_room');
       setErrorMsg('');
     } catch (err) {
       setErrorMsg('ゲーム作成に失敗しました');
@@ -107,11 +135,56 @@ const DenpouApp = () => {
       
       setGameID(joinGameID);
       setPlayerID(selectedPlayerID);
-      setAppState('game');
+      setIsParent(false);
+      setAppState(gameData.status === 'waiting' ? 'waiting_room' : 'game');
       setErrorMsg('');
     } catch (err) {
       setErrorMsg('参加に失敗しました');
       console.error(err);
+    }
+  };
+
+  // ゲーム開始
+  const startGame = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/games/${gameID}/start`, {
+        method: 'POST',
+        headers: { 'X-Player-ID': playerID },
+      });
+      const gameData = await response.json();
+      setGame(gameData);
+      setAppState('game');
+    } catch (err) {
+      setErrorMsg('ゲーム開始に失敗しました');
+    }
+  };
+
+  // ゲーム終了
+  const endGame = async () => {
+    try {
+      await fetch(`${API_BASE}/games/${gameID}/end`, {
+        method: 'POST',
+        headers: { 'X-Player-ID': playerID },
+      });
+      setAppState('result');
+    } catch (err) {
+      setErrorMsg('ゲーム終了に失敗しました');
+    }
+  };
+
+  // プレイヤーキック
+  const kickPlayer = async (kickPlayerID) => {
+    try {
+      await fetch(`${API_BASE}/games/${gameID}/kick`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Player-ID': playerID,
+        },
+        body: JSON.stringify({ playerId: kickPlayerID }),
+      });
+    } catch (err) {
+      setErrorMsg('キックに失敗しました');
     }
   };
 
@@ -135,7 +208,6 @@ const DenpouApp = () => {
       setErrorMsg('');
     } catch (err) {
       setErrorMsg('失敗しました');
-      console.error(err);
     }
   };
 
@@ -159,9 +231,12 @@ const DenpouApp = () => {
       setErrorMsg('');
     } catch (err) {
       setErrorMsg('失敗しました');
-      console.error(err);
     }
   };
+
+  if (!game && appState === 'game') {
+    return <div style={{ padding: '20px', textAlign: 'center' }}>読み込み中...</div>;
+  }
 
   // ロビー画面
   if (appState === 'lobby') {
@@ -211,12 +286,9 @@ const DenpouApp = () => {
                 fontSize: '1.1rem',
                 fontWeight: 'bold',
                 cursor: 'pointer',
-                transition: 'all 0.3s ease',
               }}
-              onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
-              onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
             >
-              ゲームを作成
+              部屋を作成
             </button>
           </div>
 
@@ -276,10 +348,7 @@ const DenpouApp = () => {
                 fontSize: '1.1rem',
                 fontWeight: 'bold',
                 cursor: 'pointer',
-                transition: 'all 0.3s ease',
               }}
-              onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
-              onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
             >
               参加する
             </button>
@@ -315,18 +384,17 @@ const DenpouApp = () => {
     );
   }
 
-  // ゲーム画面
-  if (appState === 'game' && game) {
-    const currentRoundData = game.rounds[currentRound];
-    const isParent = playerID === currentRoundData?.parentId;
-
+  // 待機部屋
+  if (appState === 'waiting_room' && game) {
+    const activePlayers = game.players.filter(p => !p.isKicked);
+    
     return (
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px' }}>
         <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 5px 20px rgba(0,0,0,0.08)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h1 style={{ fontSize: '2rem', color: '#E74C3C', margin: 0 }}>デンポー！！</h1>
             <div>
-              <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#2C3E50', marginBottom: '5px' }}>
+              <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#2C3E50' }}>
                 部屋ID: <code style={{ background: '#f5f5f5', padding: '5px 10px', borderRadius: '4px' }}>{gameID.slice(0, 8)}</code>
                 <button
                   onClick={() => {
@@ -347,9 +415,122 @@ const DenpouApp = () => {
                   コピー
                 </button>
               </div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#F39C12' }}>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ background: '#fff', padding: '30px', borderRadius: '12px', boxShadow: '0 5px 20px rgba(0,0,0,0.08)', marginBottom: '20px' }}>
+          <h2 style={{ color: '#2C3E50', marginBottom: '20px' }}>待機中...</h2>
+          <p style={{ color: '#666', marginBottom: '20px', fontSize: '1.1rem' }}>
+            他のプレイヤーを待っています
+          </p>
+
+          <h3 style={{ color: '#2C3E50', marginBottom: '15px' }}>参加プレイヤー</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '30px' }}>
+            {activePlayers.map((player) => (
+              <div
+                key={player.playerId}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '15px',
+                  background: player.playerId === playerID ? '#FFF3CD' : '#f5f5f5',
+                  borderRadius: '6px',
+                  border: player.playerId === playerID ? '2px solid #F39C12' : 'none',
+                }}
+              >
+                <span style={{ fontWeight: 'bold', color: '#2C3E50' }}>
+                  {player.name}
+                  {player.playerId === playerID && ' (あなた)'}
+                </span>
+                {isParent && player.playerId !== playerID && (
+                  <button
+                    onClick={() => kickPlayer(player.playerId)}
+                    style={{
+                      padding: '5px 15px',
+                      background: '#E74C3C',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    キック
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {isParent && (
+            <button
+              onClick={startGame}
+              style={{
+                width: '100%',
+                padding: '12px',
+                background: '#27AE60',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '1.1rem',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+              }}
+            >
+              ゲームを開始
+            </button>
+          )}
+        </div>
+
+        {errorMsg && (
+          <div style={{
+            background: 'rgba(231, 76, 60, 0.1)',
+            border: '2px solid #E74C3C',
+            color: '#E74C3C',
+            padding: '15px',
+            borderRadius: '6px',
+            fontWeight: 'bold',
+          }}>
+            {errorMsg}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ゲーム画面
+  if (appState === 'game' && game) {
+    const currentRoundData = game.rounds[currentRound];
+    const isRoundParent = playerID === currentRoundData?.parentId;
+
+    return (
+      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px' }}>
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 5px 20px rgba(0,0,0,0.08)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h1 style={{ fontSize: '2rem', color: '#E74C3C', margin: 0 }}>デンポー！！</h1>
+            <div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#F39C12', marginBottom: '10px' }}>
                 ラウンド {currentRound + 1} / {game.rounds.length}
               </div>
+              {isParent && (
+                <button
+                  onClick={endGame}
+                  style={{
+                    padding: '8px 15px',
+                    background: '#E74C3C',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  ゲームを終了
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -359,32 +540,34 @@ const DenpouApp = () => {
           <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 5px 20px rgba(0,0,0,0.08)', height: 'fit-content', position: 'sticky', top: '20px' }}>
             <h3 style={{ marginBottom: '15px', borderBottom: '2px solid #E74C3C', paddingBottom: '10px', color: '#2C3E50' }}>スコア</h3>
             {game.players.map((player) => (
-              <div
-                key={player.playerId}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '12px',
-                  background: player.playerId === playerID ? '#FFF3CD' : '#f5f5f5',
-                  marginBottom: '10px',
-                  borderRadius: '6px',
-                  border: player.playerId === playerID ? '2px solid #F39C12' : 'none',
-                }}
-              >
-                <span style={{ fontWeight: 'bold', color: '#2C3E50' }}>
-                  {player.name}
-                  {player.playerId === playerID && ' (あなた)'}
-                </span>
-                <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#E74C3C' }}>
-                  {player.totalScore}点
-                </span>
-              </div>
+              !player.isKicked && (
+                <div
+                  key={player.playerId}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '12px',
+                    background: player.playerId === playerID ? '#FFF3CD' : '#f5f5f5',
+                    marginBottom: '10px',
+                    borderRadius: '6px',
+                    border: player.playerId === playerID ? '2px solid #F39C12' : 'none',
+                  }}
+                >
+                  <span style={{ fontWeight: 'bold', color: '#2C3E50' }}>
+                    {player.name}
+                    {player.playerId === playerID && ' (あなた)'}
+                  </span>
+                  <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#E74C3C' }}>
+                    {player.totalScore}点
+                  </span>
+                </div>
+              )
             ))}
           </div>
 
           {/* ゲーム画面 */}
           <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 5px 20px rgba(0,0,0,0.08)' }}>
-            {isParent && currentRoundData?.status === 'waiting' && (
+            {isRoundParent && currentRoundData?.status === 'waiting' && (
               <div>
                 <h2 style={{ color: '#E74C3C', marginBottom: '15px' }}>👑 親のターン</h2>
                 <p style={{ color: '#666', marginBottom: '15px' }}>ヒントの対象となる答えを入力してください</p>
@@ -422,7 +605,7 @@ const DenpouApp = () => {
               </div>
             )}
 
-            {!isParent && currentRoundData?.status === 'hint_phase' && (
+            {!isRoundParent && currentRoundData?.status === 'hint_phase' && (
               <div>
                 <h2 style={{ color: '#E74C3C', marginBottom: '15px' }}>💡 ヒント出題フェーズ</h2>
                 <p style={{ color: '#666', marginBottom: '10px' }}>
@@ -499,13 +682,12 @@ const DenpouApp = () => {
               </div>
             )}
 
-            {isParent && currentRoundData?.status === 'hint_phase' && (
+            {isRoundParent && currentRoundData?.status === 'hint_phase' && (
               <div>
                 <h2 style={{ color: '#E74C3C', marginBottom: '15px' }}>👑 ヒント出題中...</h2>
                 <p style={{ color: '#666', marginBottom: '15px' }}>子たちのヒントを見ています</p>
                 {currentRoundData.hints.length > 0 && (
                   <div>
-                    <h4 style={{ color: '#2C3E50', marginBottom: '10px' }}>現在のヒント:</h4>
                     {currentRoundData.hints.map((hint, idx) => (
                       <div
                         key={idx}
@@ -600,7 +782,7 @@ const DenpouApp = () => {
 
   // 結果画面
   if (appState === 'result' && game) {
-    const sorted = [...game.players].sort((a, b) => b.totalScore - a.totalScore);
+    const sorted = [...game.players].filter(p => !p.isKicked).sort((a, b) => b.totalScore - a.totalScore);
     return (
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
         <h1 style={{ textAlign: 'center', fontSize: '2.5rem', color: '#E74C3C', marginBottom: '30px' }}>
@@ -644,6 +826,7 @@ const DenpouApp = () => {
             setParentName('');
             setJoinGameID('');
             setPlayerName('');
+            setIsParent(false);
           }}
           style={{
             width: '100%',
