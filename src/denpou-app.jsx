@@ -12,7 +12,7 @@ const DenpouApp = () => {
   const [answer, setAnswer] = useState('');
   const [hintText, setHintText] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  const [_, setWs] = useState(null);
+  const [, setWs] = useState(null);
   const [joinGameID, setJoinGameID] = useState('');
   const [playerName, setPlayerName] = useState('');
 
