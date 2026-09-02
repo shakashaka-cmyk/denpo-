@@ -12,7 +12,7 @@ const DenpouApp = () => {
   const [answer, setAnswer] = useState('');
   const [hintText, setHintText] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  const [ws, setWs] = useState(null);
+  const [_, setWs] = useState(null);
   const [joinGameID, setJoinGameID] = useState('');
   const [playerName, setPlayerName] = useState('');
 
@@ -162,33 +162,6 @@ const DenpouApp = () => {
       console.error(err);
     }
   };
-
-  // 解答
-  const submitAnswer = async () => {
-    if (!answer.trim()) {
-      setErrorMsg('答えを入力してください');
-      return;
-    }
-
-    try {
-      await fetch(`${API_BASE}/games/${gameID}/answer`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Player-ID': playerID,
-        },
-        body: JSON.stringify({ answer }),
-      });
-      setAnswer('');
-    } catch (err) {
-      setErrorMsg('失敗しました');
-      console.error(err);
-    }
-  };
-
-  if (!game && appState === 'game') {
-    return <div style={{ padding: '20px', textAlign: 'center' }}>読み込み中...</div>;
-  }
 
   // ロビー画面
   if (appState === 'lobby') {
