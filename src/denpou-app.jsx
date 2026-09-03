@@ -387,6 +387,7 @@ const DenpouApp = () => {
   // 待機部屋
   if (appState === 'waiting_room' && game) {
     const activePlayers = game.players.filter(p => !p.isKicked);
+    const displayID = gameID.slice(0, 4);
     
     return (
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px' }}>
@@ -395,10 +396,10 @@ const DenpouApp = () => {
             <h1 style={{ fontSize: '2rem', color: '#E74C3C', margin: 0 }}>デンポー！！</h1>
             <div>
               <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#2C3E50' }}>
-                部屋ID: <code style={{ background: '#f5f5f5', padding: '5px 10px', borderRadius: '4px' }}>{gameID.slice(0, 8)}</code>
+                部屋ID: <code style={{ background: '#f5f5f5', padding: '5px 10px', borderRadius: '4px', fontSize: '1.2rem', fontWeight: 'bold' }}>{displayID}</code>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(gameID);
+                    navigator.clipboard.writeText(displayID);
                     alert('部屋IDをコピーしました！');
                   }}
                   style={{
