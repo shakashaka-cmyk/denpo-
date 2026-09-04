@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
+	"math/rand"
 	"net/http"
 	"os"
 	"sync"
@@ -13,12 +15,16 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func generateShortID() string {
+	return fmt.Sprintf("%04d", rand.Intn(10000))
+}
+
 type Game struct {
-	GameID    string       `json:"gameId"`
-	Players   []Player     `json:"players"`
-	Rounds    []Round      `json:"rounds"`
-	Status    string       `json:"status"`
-	CreatedAt time.Time    `json:"createdAt"`
+	GameID    string    `json:"gameId"`
+	Players   []Player  `json:"players"`
+	Rounds    []Round   `json:"rounds"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 type Player struct {
@@ -83,7 +89,7 @@ func CreateGame(w http.ResponseWriter, r *http.Request) {
 
 	json.NewDecoder(r.Body).Decode(&req)
 
-	gameID := uuid.New().String()
+	gameID := generateShortID()
 	game := &Game{
 		GameID:    gameID,
 		Players:   []Player{},
