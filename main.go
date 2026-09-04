@@ -15,16 +15,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func generateShortID() string {
-	return fmt.Sprintf("%04d", rand.Intn(10000))
-}
-
 type Game struct {
-	GameID    string    `json:"gameId"`
-	Players   []Player  `json:"players"`
-	Rounds    []Round   `json:"rounds"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"createdAt"`
+	GameID    string       `json:"gameId"`
+	Players   []Player     `json:"players"`
+	Rounds    []Round      `json:"rounds"`
+	Status    string       `json:"status"`
+	CreatedAt time.Time    `json:"createdAt"`
 }
 
 type Player struct {
@@ -70,6 +66,11 @@ var (
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 )
+
+// 4桁のランダムIDを生成
+func generateShortID() string {
+	return fmt.Sprintf("%04d", rand.Intn(10000))
+}
 
 func calculateScore(charCount, order int) int {
 	if order == 0 {
@@ -141,6 +142,54 @@ func GetGame(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(room.Game)
+}
+
+// JoinGame - ゲームにプレイヤーを追加
+func JoinGame(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	gameID := vars["gameId"]
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	if req.Name == "" {
+		http.Error(w, "Player name required", http.StatusBadRequest)
+		return
+	}
+
+	roomsMu.RLock()
+	room, ok := rooms[gameID]
+	roomsMu.RUnlock()
+
+	if !ok {
+		http.Error(w, "Game not found", http.StatusNotFound)
+		return
+	}
+
+	room.Mu.Lock()
+	defer room.Mu.Unlock()
+
+	// ゲーム開始後は参加禁止
+	if room.Game.Status != "waiting" {
+		http.Error(w, "Game already started", http.StatusBadRequest)
+		return
+	}
+
+	// 新しいプレイヤーを追加
+	newPlayer := Player{
+		PlayerID:   uuid.New().String(),
+		Name:       req.Name,
+		TotalScore: 0,
+		IsKicked:   false,
+	}
+
+	room.Game.Players = append(room.Game.Players, newPlayer)
+	room.Broadcast <- room.Game
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(newPlayer)
 }
 
 // StartGame - ゲームを開始（待機部屋から本ゲームへ）
@@ -484,6 +533,7 @@ func main() {
 	r.HandleFunc("/health", HealthCheck).Methods("GET")
 	r.HandleFunc("/api/games", CreateGame).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}", GetGame).Methods("GET", "OPTIONS")
+	r.HandleFunc("/api/games/{gameId}/join", JoinGame).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}/start", StartGame).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}/end", EndGame).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}/kick", KickPlayer).Methods("POST", "OPTIONS")
