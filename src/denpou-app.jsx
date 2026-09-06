@@ -10,6 +10,7 @@ const DenpouApp = () => {
   const [game, setGame] = useState(null);
   const [currentRound, setCurrentRound] = useState(0);
   const [hintText, setHintText] = useState('');
+  const [answerText, setAnswerText] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [, setWs] = useState(null);
   const [joinGameID, setJoinGameID] = useState('');
@@ -258,8 +259,8 @@ const DenpouApp = () => {
   };
 
   // 解答投稿
-  const submitAnswer = async (answer) => {
-    if (!answer.trim()) {
+  const submitAnswer = async () => {
+    if (!answerText.trim()) {
       setErrorMsg('答えを入力してください');
       return;
     }
@@ -271,8 +272,9 @@ const DenpouApp = () => {
           'Content-Type': 'application/json',
           'X-Player-ID': playerID,
         },
-        body: JSON.stringify({ answer }),
+        body: JSON.stringify({ answer: answerText }),
       });
+      setAnswerText('');
       setErrorMsg('');
     } catch (err) {
       setErrorMsg('失敗しました');
@@ -293,9 +295,7 @@ const DenpouApp = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
               <button
-                onClick={() => {
-                  setGameMode('pokemon');
-                }}
+                onClick={() => setGameMode('pokemon')}
                 style={{
                   padding: '30px',
                   border: gameMode === 'pokemon' ? '3px solid #E74C3C' : '2px solid #ddd',
@@ -311,9 +311,7 @@ const DenpouApp = () => {
                 🔴 ポケモンモード
               </button>
               <button
-                onClick={() => {
-                  setGameMode('general');
-                }}
+                onClick={() => setGameMode('general')}
                 style={{
                   padding: '30px',
                   border: gameMode === 'general' ? '3px solid #E74C3C' : '2px solid #ddd',
@@ -719,34 +717,74 @@ const DenpouApp = () => {
           <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 5px 20px rgba(0,0,0,0.08)' }}>
             {isRoundParent && currentRoundData?.status === 'hint_phase' && (
               <div>
-                <h2 style={{ color: '#E74C3C', marginBottom: '15px' }}>👑 親のターン</h2>
-                <p style={{ color: '#666', marginBottom: '10px' }}>お題: <strong style={{ fontSize: '1.3rem' }}>{currentRoundData?.answer}</strong></p>
-                <p style={{ color: '#F39C12', fontWeight: 'bold', marginBottom: '15px' }}>
-                  これを当てるヒントが出されるのを待ってください
-                </p>
-                {currentRoundData.hints.length > 0 && (
-                  <div style={{ marginTop: '20px' }}>
-                    <h4 style={{ color: '#2C3E50', marginBottom: '10px' }}>出されたヒント</h4>
-                    {currentRoundData.hints.map((hint, idx) => (
-                      <div
-                        key={idx}
-                        style={{
-                          background: 'linear-gradient(135deg, rgba(243, 156, 18, 0.1), rgba(231, 76, 60, 0.1))',
-                          padding: '15px',
-                          marginBottom: '10px',
-                          borderRadius: '6px',
-                          borderLeft: '4px solid #F39C12',
-                        }}
-                      >
-                        <div style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '5px', color: '#2C3E50' }}>
-                          #{hint.order} {hint.text}
+                {currentRoundData.hints.length === 0 ? (
+                  <>
+                    <h2 style={{ color: '#E74C3C', marginBottom: '15px' }}>👑 親のターン</h2>
+                    <p style={{ color: '#F39C12', fontWeight: 'bold', marginBottom: '15px' }}>
+                      子たちのヒントを待っています...
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h2 style={{ color: '#E74C3C', marginBottom: '15px' }}>👑 親のターン</h2>
+                    <p style={{ color: '#F39C12', fontWeight: 'bold', marginBottom: '15px' }}>
+                      子たちのヒントを見てお題を当ててください！
+                    </p>
+                    <div style={{ marginBottom: '20px' }}>
+                      <h4 style={{ color: '#2C3E50', marginBottom: '10px' }}>出されたヒント</h4>
+                      {currentRoundData.hints.map((hint, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(243, 156, 18, 0.1), rgba(231, 76, 60, 0.1))',
+                            padding: '15px',
+                            marginBottom: '10px',
+                            borderRadius: '6px',
+                            borderLeft: '4px solid #F39C12',
+                          }}
+                        >
+                          <div style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '5px', color: '#2C3E50' }}>
+                            #{hint.order} {hint.text}
+                          </div>
+                          <div style={{ color: '#7F8C8D', fontSize: '0.9rem' }}>
+                            {hint.charCount}字 → {hint.score}点
+                          </div>
                         </div>
-                        <div style={{ color: '#7F8C8D', fontSize: '0.9rem' }}>
-                          {hint.charCount}字 → {hint.score}点
-                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '2px solid #ddd' }}>
+                      <h4 style={{ color: '#2C3E50', marginBottom: '10px' }}>答えを入力</h4>
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        <input
+                          type="text"
+                          value={answerText}
+                          onChange={(e) => setAnswerText(e.target.value)}
+                          placeholder="答えを入力"
+                          style={{
+                            flex: 1,
+                            padding: '10px',
+                            border: '2px solid #ddd',
+                            borderRadius: '6px',
+                            fontSize: '1rem',
+                          }}
+                        />
+                        <button
+                          onClick={submitAnswer}
+                          style={{
+                            padding: '10px 20px',
+                            background: '#27AE60',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          回答
+                        </button>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  </>
                 )}
               </div>
             )}
@@ -822,43 +860,6 @@ const DenpouApp = () => {
                     ))}
                   </div>
                 )}
-
-                {/* 解答入力 */}
-                <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '2px solid #ddd' }}>
-                  <h4 style={{ color: '#2C3E50', marginBottom: '10px' }}>答えを入力（わかったら）</h4>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <input
-                      type="text"
-                      id="answerInput"
-                      placeholder="答えを入力"
-                      style={{
-                        flex: 1,
-                        padding: '10px',
-                        border: '2px solid #ddd',
-                        borderRadius: '6px',
-                        fontSize: '1rem',
-                      }}
-                    />
-                    <button
-                      onClick={() => {
-                        const answer = document.getElementById('answerInput').value;
-                        submitAnswer(answer);
-                        document.getElementById('answerInput').value = '';
-                      }}
-                      style={{
-                        padding: '10px 20px',
-                        background: '#27AE60',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontWeight: 'bold',
-                      }}
-                    >
-                      回答
-                    </button>
-                  </div>
-                </div>
               </div>
             )}
 
@@ -876,6 +877,7 @@ const DenpouApp = () => {
                     onClick={() => {
                       setCurrentRound(currentRound + 1);
                       setHintText('');
+                      setAnswerText('');
                     }}
                     style={{
                       width: '100%',
