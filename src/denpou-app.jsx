@@ -16,9 +16,9 @@ const DenpouApp = () => {
   const [joinGameID, setJoinGameID] = useState('');
   const [playerName, setPlayerName] = useState('');
   const [isParent, setIsParent] = useState(false);
-  const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [gameMode, setGameMode] = useState('pokemon');
   const [showModeSelect, setShowModeSelect] = useState(false);
+  const [wsRetryCount, setWsRetryCount] = useState(0);
 
   // localStorage から復帰
   useEffect(() => {
@@ -34,69 +34,81 @@ const DenpouApp = () => {
     }
   }, []);
 
-  // WebSocket接続 + 再接続
+  // WebSocket接続 + 自動リトライ
   useEffect(() => {
-    if (gameID && playerID) {
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const hostPart = API_BASE.split('//')[1].split('/')[0];
-      const wsURL = `${wsProtocol}//${hostPart}/api/games/${gameID}/ws`;
-      
-      try {
-        const websocket = new WebSocket(wsURL);
+    if (gameID && playerID && appState === 'game') {
+      const connectWebSocket = () => {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const hostPart = API_BASE.split('//')[1].split('/')[0];
+        const wsURL = `${wsProtocol}//${hostPart}/api/games/${gameID}/ws`;
+        
+        try {
+          const websocket = new WebSocket(wsURL);
 
-        websocket.onopen = () => {
-          setReconnectAttempts(0);
-          websocket.setRequestHeader('X-Player-ID', playerID);
-        };
+          websocket.onopen = () => {
+            console.log('WebSocket connected');
+            setWsRetryCount(0);
+            websocket.setRequestHeader('X-Player-ID', playerID);
+          };
 
-        websocket.onmessage = (event) => {
-          try {
-            const updatedGame = JSON.parse(event.data);
-            setGame(updatedGame);
-            setAppState(updatedGame.status === 'playing' ? 'game' : 'waiting_room');
+          websocket.onmessage = (event) => {
+            try {
+              const updatedGame = JSON.parse(event.data);
+              setGame(updatedGame);
 
-            // キックされたか確認
-            const currentPlayer = updatedGame.players.find(p => p.playerId === playerID);
-            if (currentPlayer && currentPlayer.isKicked) {
-              setErrorMsg('このゲームからキックされました');
-              setTimeout(() => {
-                localStorage.removeItem('denpo_gameID');
-                localStorage.removeItem('denpo_playerID');
-                localStorage.removeItem('denpo_isParent');
-                setAppState('lobby');
-                setGameID(null);
-                setPlayerID(null);
-              }, 2000);
+              // キックされたか確認
+              const currentPlayer = updatedGame.players.find(p => p.playerId === playerID);
+              if (currentPlayer && currentPlayer.isKicked) {
+                setErrorMsg('このゲームからキックされました');
+                setTimeout(() => {
+                  localStorage.removeItem('denpo_gameID');
+                  localStorage.removeItem('denpo_playerID');
+                  localStorage.removeItem('denpo_isParent');
+                  setAppState('lobby');
+                  setGameID(null);
+                  setPlayerID(null);
+                }, 2000);
+              }
+            } catch (e) {
+              console.error('WebSocket parse error:', e);
             }
-          } catch (e) {
-            console.error('WebSocket parse error:', e);
-          }
-        };
+          };
 
-        websocket.onerror = (error) => {
-          console.error('WebSocket error:', error);
-        };
+          websocket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+          };
 
-        websocket.onclose = () => {
-          if (reconnectAttempts < 30) {
+          websocket.onclose = () => {
+            console.log('WebSocket closed, retrying...');
+            // 3秒待ってリトライ（最大10回）
+            if (wsRetryCount < 10) {
+              setTimeout(() => {
+                setWsRetryCount(wsRetryCount + 1);
+              }, 3000);
+            }
+          };
+
+          setWs(websocket);
+
+          return () => {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+              websocket.close();
+            }
+          };
+        } catch (e) {
+          console.error('WebSocket connection error:', e);
+          // 3秒待ってリトライ
+          if (wsRetryCount < 10) {
             setTimeout(() => {
-              setReconnectAttempts(reconnectAttempts + 1);
-            }, 10000);
+              setWsRetryCount(wsRetryCount + 1);
+            }, 3000);
           }
-        };
+        }
+      };
 
-        setWs(websocket);
-
-        return () => {
-          if (websocket && websocket.readyState === WebSocket.OPEN) {
-            websocket.close();
-          }
-        };
-      } catch (e) {
-        console.error('WebSocket connection error:', e);
-      }
+      connectWebSocket();
     }
-  }, [gameID, playerID, reconnectAttempts]);
+  }, [gameID, playerID, appState, wsRetryCount]);
 
   // ゲーム作成（待機部屋）
   const createGame = async () => {
