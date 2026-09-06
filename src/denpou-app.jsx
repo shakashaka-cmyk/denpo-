@@ -778,8 +778,14 @@ const DenpouApp = () => {
             {!isRoundParent && currentRoundData?.status === 'hint_phase' && (
               <div>
                 <h2 style={{ color: '#E74C3C', marginBottom: '15px' }}>💡 ヒント出題フェーズ</h2>
+                <div style={{ background: '#FFF3CD', padding: '15px', borderRadius: '8px', marginBottom: '15px', border: '2px solid #F39C12' }}>
+                  <p style={{ color: '#F39C12', fontWeight: 'bold', margin: '0 0 8px 0' }}>📌 お題</p>
+                  <p style={{ color: '#E74C3C', fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>
+                    {currentRoundData?.answer}
+                  </p>
+                </div>
                 <p style={{ color: '#F39C12', fontWeight: 'bold', marginBottom: '15px' }}>
-                  親は何かを思っています。ヒントを出してください（文字数が少ないほど高得点！）
+                  このお題を当てるようにヒントを出してください（文字数が少ないほど高得点！）
                 </p>
                 <textarea
                   value={hintText}
