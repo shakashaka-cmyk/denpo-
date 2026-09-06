@@ -560,6 +560,32 @@ func HealthCheck(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
+// Keepalive: Renderの15分スリープ対策
+// 10分ごとに自分へのリクエストを送信してスリープを防ぐ
+func init() {
+	go func() {
+		time.Sleep(5 * time.Minute) // 起動5分後から開始
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			port := os.Getenv("PORT")
+			if port == "" {
+				port = "8080"
+			}
+			healthURL := fmt.Sprintf("http://localhost:%s/api/games", port)
+			
+			resp, err := http.Get(healthURL)
+			if err != nil {
+				fmt.Println("[Keepalive] エラー:", err)
+				continue
+			}
+			resp.Body.Close()
+			fmt.Println("[Keepalive] Renderを起動状態に保持 -", time.Now().Format("15:04:05"))
+		}
+	}()
+}
+
 func main() {
 	r := mux.NewRouter()
 
