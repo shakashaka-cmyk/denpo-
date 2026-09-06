@@ -32,13 +32,14 @@ const DenpouApp = () => {
     }
   }, []);
 
-  // ポーリング - ゲーム情報を定期的に取得
+  // ポーリング - ゲーム情報を定期的に取得（待機部屋＆ゲーム画面で起動）
   useEffect(() => {
-    if (gameID && appState !== 'lobby') {
+    if (gameID && playerID && (appState === 'waiting_room' || appState === 'game')) {
       const pollGame = async () => {
         try {
           const response = await fetch(`${API_BASE}/games/${gameID}`);
           if (!response.ok) {
+            console.error('ゲームが見つかりません');
             setErrorMsg('ゲームが見つかりません');
             return;
           }
@@ -82,7 +83,7 @@ const DenpouApp = () => {
 
       return () => clearInterval(interval);
     }
-  }, [gameID, appState, playerID]);
+  }, [gameID, playerID, appState]);
 
   // ゲーム作成（待機部屋）
   const createGame = async () => {
@@ -133,6 +134,7 @@ const DenpouApp = () => {
     }
 
     try {
+      // まずゲーム情報を取得
       const response = await fetch(`${API_BASE}/games/${joinGameID}`, {
         method: 'GET',
       });
@@ -158,6 +160,8 @@ const DenpouApp = () => {
 
       const newPlayer = await joinResponse.json();
       const newPlayerID = newPlayer.playerId;
+
+      console.log('参加成功:', newPlayerID);
 
       // localStorage に保存
       localStorage.setItem('denpo_gameID', joinGameID);
