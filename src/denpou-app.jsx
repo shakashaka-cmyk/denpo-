@@ -12,13 +12,11 @@ const DenpouApp = () => {
   const [hintText, setHintText] = useState('');
   const [answerText, setAnswerText] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  const [, setWs] = useState(null);
   const [joinGameID, setJoinGameID] = useState('');
   const [playerName, setPlayerName] = useState('');
   const [isParent, setIsParent] = useState(false);
   const [gameMode, setGameMode] = useState('pokemon');
   const [showModeSelect, setShowModeSelect] = useState(false);
-  const [wsRetryCount, setWsRetryCount] = useState(0);
 
   // localStorage から復帰
   useEffect(() => {
@@ -34,81 +32,57 @@ const DenpouApp = () => {
     }
   }, []);
 
-  // WebSocket接続 + 自動リトライ
+  // ポーリング - ゲーム情報を定期的に取得
   useEffect(() => {
-    if (gameID && playerID && appState === 'game') {
-      const connectWebSocket = () => {
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const hostPart = API_BASE.split('//')[1].split('/')[0];
-        const wsURL = `${wsProtocol}//${hostPart}/api/games/${gameID}/ws`;
-        
+    if (gameID && appState !== 'lobby') {
+      const pollGame = async () => {
         try {
-          const websocket = new WebSocket(wsURL);
-
-          websocket.onopen = () => {
-            console.log('WebSocket connected');
-            setWsRetryCount(0);
-            websocket.setRequestHeader('X-Player-ID', playerID);
-          };
-
-          websocket.onmessage = (event) => {
-            try {
-              const updatedGame = JSON.parse(event.data);
-              setGame(updatedGame);
-
-              // キックされたか確認
-              const currentPlayer = updatedGame.players.find(p => p.playerId === playerID);
-              if (currentPlayer && currentPlayer.isKicked) {
-                setErrorMsg('このゲームからキックされました');
-                setTimeout(() => {
-                  localStorage.removeItem('denpo_gameID');
-                  localStorage.removeItem('denpo_playerID');
-                  localStorage.removeItem('denpo_isParent');
-                  setAppState('lobby');
-                  setGameID(null);
-                  setPlayerID(null);
-                }, 2000);
-              }
-            } catch (e) {
-              console.error('WebSocket parse error:', e);
-            }
-          };
-
-          websocket.onerror = (error) => {
-            console.error('WebSocket error:', error);
-          };
-
-          websocket.onclose = () => {
-            console.log('WebSocket closed, retrying...');
-            // 3秒待ってリトライ（最大10回）
-            if (wsRetryCount < 10) {
-              setTimeout(() => {
-                setWsRetryCount(wsRetryCount + 1);
-              }, 3000);
-            }
-          };
-
-          setWs(websocket);
-
-          return () => {
-            if (websocket && websocket.readyState === WebSocket.OPEN) {
-              websocket.close();
-            }
-          };
-        } catch (e) {
-          console.error('WebSocket connection error:', e);
-          // 3秒待ってリトライ
-          if (wsRetryCount < 10) {
-            setTimeout(() => {
-              setWsRetryCount(wsRetryCount + 1);
-            }, 3000);
+          const response = await fetch(`${API_BASE}/games/${gameID}`);
+          if (!response.ok) {
+            setErrorMsg('ゲームが見つかりません');
+            return;
           }
+          const updatedGame = await response.json();
+          setGame(updatedGame);
+
+          // ゲーム開始判定
+          if (updatedGame.status === 'playing' && appState === 'waiting_room') {
+            setAppState('game');
+            setCurrentRound(0);
+          }
+
+          // 終了判定
+          if (updatedGame.status === 'finished' && appState === 'game') {
+            setAppState('result');
+          }
+
+          // キックされたか確認
+          const currentPlayer = updatedGame.players.find(p => p.playerId === playerID);
+          if (currentPlayer && currentPlayer.isKicked) {
+            setErrorMsg('このゲームからキックされました');
+            setTimeout(() => {
+              localStorage.removeItem('denpo_gameID');
+              localStorage.removeItem('denpo_playerID');
+              localStorage.removeItem('denpo_isParent');
+              setAppState('lobby');
+              setGameID(null);
+              setPlayerID(null);
+            }, 2000);
+          }
+        } catch (err) {
+          console.error('ポーリングエラー:', err);
         }
       };
 
-      connectWebSocket();
+      // 初回即座に実行
+      pollGame();
+
+      // 1秒ごとに定期実行
+      const interval = setInterval(pollGame, 1000);
+
+      return () => clearInterval(interval);
     }
-  }, [gameID, playerID, appState, wsRetryCount]);
+  }, [gameID, appState, playerID]);
 
   // ゲーム作成（待機部屋）
   const createGame = async () => {
