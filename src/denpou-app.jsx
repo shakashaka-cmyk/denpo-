@@ -682,6 +682,9 @@ const DenpouApp = () => {
     const isRoundParent = playerID === currentRoundData?.parentId;
     const activePlayers = game.players.filter(p => !p.isKicked);
 
+    // デバッグ用：currentRound を表示
+    console.log('currentRound:', currentRound, 'roundNumber:', currentRoundData?.roundNumber, 'parentId:', currentRoundData?.parentId);
+
     // ヒントを文字数でソート
     const sortedHints = currentRoundData?.hints ? [...currentRoundData.hints].sort((a, b) => a.charCount - b.charCount) : [];
     const revealedHintIdx = currentRoundData?.revealedHintIdx ?? -1;
