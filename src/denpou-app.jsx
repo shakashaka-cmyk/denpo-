@@ -661,7 +661,6 @@ const DenpouApp = () => {
     const currentRoundData = game.rounds[currentRound];
     const isRoundParent = playerID === currentRoundData?.parentId;
     const activePlayers = game.players.filter(p => !p.isKicked);
-    const childPlayers = activePlayers.filter(p => p.playerId !== currentRoundData?.parentId);
 
     // ヒントを文字数でソート
     const sortedHints = currentRoundData?.hints ? [...currentRoundData.hints].sort((a, b) => a.charCount - b.charCount) : [];
