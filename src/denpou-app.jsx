@@ -39,8 +39,19 @@ const DenpouApp = () => {
         try {
           const response = await fetch(`${API_BASE}/games/${gameID}`);
           if (!response.ok) {
-            console.error('ゲームが見つかりません');
-            setErrorMsg('ゲームが見つかりません');
+            console.error('ゲームが見つかりません（404）');
+            // ゲームが見つからない → 退出してロビーに戻す
+            setErrorMsg('ゲームが見つかりません。ロビーに戻ります...');
+            setTimeout(() => {
+              localStorage.removeItem('denpo_gameID');
+              localStorage.removeItem('denpo_playerID');
+              localStorage.removeItem('denpo_isParent');
+              setAppState('lobby');
+              setGameID(null);
+              setPlayerID(null);
+              setGame(null);
+              setErrorMsg('');
+            }, 2000);
             return;
           }
           const updatedGame = await response.json();
