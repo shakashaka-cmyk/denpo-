@@ -66,6 +66,15 @@ const DenpouApp = () => {
             setAppState('result');
           }
 
+          // 現在のラウンドが終了したか確認
+          if (appState === 'game' && currentRound < updatedGame.rounds.length) {
+            const currentRoundData = updatedGame.rounds[currentRound];
+            if (currentRoundData?.status === 'finished' && currentRound < updatedGame.rounds.length - 1) {
+              // 次のラウンドへ自動進行
+              setCurrentRound(currentRound + 1);
+            }
+          }
+
           const currentPlayer = updatedGame.players.find(p => p.playerId === playerID);
           if (currentPlayer && currentPlayer.isKicked) {
             setErrorMsg('このゲームからキックされました');
