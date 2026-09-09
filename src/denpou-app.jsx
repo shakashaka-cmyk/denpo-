@@ -17,6 +17,7 @@ const DenpouApp = () => {
   const [isParent, setIsParent] = useState(false);
   const [gameMode, setGameMode] = useState('pokemon');
   const [showModeSelect, setShowModeSelect] = useState(false);
+  const [answerFeedback, setAnswerFeedback] = useState('');
 
   // localStorage から復帰
   useEffect(() => {
@@ -40,7 +41,6 @@ const DenpouApp = () => {
           const response = await fetch(`${API_BASE}/games/${gameID}`);
           if (!response.ok) {
             console.error('ゲームが見つかりません（404）');
-            // ゲームが見つからない → 退出してロビーに戻す
             setErrorMsg('ゲームが見つかりません。ロビーに戻ります...');
             setTimeout(() => {
               localStorage.removeItem('denpo_gameID');
@@ -86,12 +86,8 @@ const DenpouApp = () => {
         }
       };
 
-      // 初回即座に実行
       pollGame();
-
-      // 1秒ごとに定期実行
       const interval = setInterval(pollGame, 1000);
-
       return () => clearInterval(interval);
     }
   }, [gameID, playerID, appState]);
@@ -114,7 +110,6 @@ const DenpouApp = () => {
       const newGameID = gameData.gameId;
       const newPlayerID = gameData.players[0].playerId;
 
-      // localStorage に保存
       localStorage.setItem('denpo_gameID', newGameID);
       localStorage.setItem('denpo_playerID', newPlayerID);
       localStorage.setItem('denpo_isParent', 'true');
@@ -145,7 +140,6 @@ const DenpouApp = () => {
     }
 
     try {
-      // まずゲーム情報を取得
       const response = await fetch(`${API_BASE}/games/${joinGameID}`, {
         method: 'GET',
       });
@@ -157,7 +151,6 @@ const DenpouApp = () => {
 
       const gameData = await response.json();
       
-      // プレイヤーを追加
       const joinResponse = await fetch(`${API_BASE}/games/${joinGameID}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -172,9 +165,6 @@ const DenpouApp = () => {
       const newPlayer = await joinResponse.json();
       const newPlayerID = newPlayer.playerId;
 
-      console.log('参加成功:', newPlayerID);
-
-      // localStorage に保存
       localStorage.setItem('denpo_gameID', joinGameID);
       localStorage.setItem('denpo_playerID', newPlayerID);
       localStorage.setItem('denpo_isParent', 'false');
@@ -259,6 +249,19 @@ const DenpouApp = () => {
     }
   };
 
+  // 次のヒントを開示
+  const revealNextHint = async () => {
+    try {
+      await fetch(`${API_BASE}/games/${gameID}/reveal`, {
+        method: 'POST',
+        headers: { 'X-Player-ID': playerID },
+      });
+      setAnswerFeedback('');
+    } catch (err) {
+      setErrorMsg('失敗しました');
+    }
+  };
+
   // 解答投稿
   const submitAnswer = async () => {
     if (!answerText.trim()) {
@@ -267,7 +270,7 @@ const DenpouApp = () => {
     }
 
     try {
-      await fetch(`${API_BASE}/games/${gameID}/answer`, {
+      const response = await fetch(`${API_BASE}/games/${gameID}/answer`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -275,8 +278,17 @@ const DenpouApp = () => {
         },
         body: JSON.stringify({ answer: answerText }),
       });
+      
+      const updatedGame = await response.json();
+      setGame(updatedGame);
       setAnswerText('');
-      setErrorMsg('');
+      
+      const currentRoundData = updatedGame.rounds[currentRound];
+      if (currentRoundData?.correctAnswer) {
+        setAnswerFeedback('✅ 正解！');
+      } else {
+        setAnswerFeedback('❌ ハズレ');
+      }
     } catch (err) {
       setErrorMsg('失敗しました');
     }
@@ -416,7 +428,6 @@ const DenpouApp = () => {
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '40px' }}>
-          {/* 部屋作成 */}
           <div style={{ background: '#fff', padding: '30px', borderRadius: '12px', boxShadow: '0 5px 20px rgba(0,0,0,0.1)' }}>
             <h2 style={{ marginBottom: '20px', color: '#2C3E50' }}>新しい部屋を作成</h2>
             
@@ -438,7 +449,6 @@ const DenpouApp = () => {
             </button>
           </div>
 
-          {/* 部屋参加 */}
           <div style={{ background: '#fff', padding: '30px', borderRadius: '12px', boxShadow: '0 5px 20px rgba(0,0,0,0.1)' }}>
             <h2 style={{ marginBottom: '20px', color: '#2C3E50' }}>既存の部屋に参加</h2>
             
@@ -521,8 +531,8 @@ const DenpouApp = () => {
           <ul style={{ listStyle: 'none', color: '#2C3E50', lineHeight: '1.8' }}>
             <li>→ 親にお題が自動で割り当てられる</li>
             <li>→ 子が少ない文字数でヒントを出す</li>
-            <li>→ スコア = 18 - (文字数 ÷ 順番)※小数点切り上げ</li>
-            <li>→ 正解で親と解答者に同じ得点</li>
+            <li>→ スコア = (18 - 文字数) ÷ 順番 ※小数点切り上げ</li>
+            <li>→ 正解で親とそのヒント提出者に同じ得点</li>
             <li>→ 親を2周、合計得点を競う</li>
           </ul>
         </div>
@@ -654,6 +664,10 @@ const DenpouApp = () => {
     const currentRoundData = game.rounds[currentRound];
     const isRoundParent = playerID === currentRoundData?.parentId;
 
+    // ヒントを文字数でソート
+    const sortedHints = currentRoundData?.hints ? [...currentRoundData.hints].sort((a, b) => a.charCount - b.charCount) : [];
+    const revealedHintIdx = currentRoundData?.revealedHintIdx ?? -1;
+
     return (
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px' }}>
         <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 5px 20px rgba(0,0,0,0.08)' }}>
@@ -718,74 +732,104 @@ const DenpouApp = () => {
           <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 5px 20px rgba(0,0,0,0.08)' }}>
             {isRoundParent && currentRoundData?.status === 'hint_phase' && (
               <div>
-                {currentRoundData.hints.length === 0 ? (
-                  <>
-                    <h2 style={{ color: '#E74C3C', marginBottom: '15px' }}>👑 親のターン</h2>
-                    <p style={{ color: '#F39C12', fontWeight: 'bold', marginBottom: '15px' }}>
-                      子たちのヒントを待っています...
+                <h2 style={{ color: '#E74C3C', marginBottom: '15px' }}>👑 親のターン</h2>
+                
+                {revealedHintIdx === -1 ? (
+                  <div>
+                    <p style={{ color: '#F39C12', fontWeight: 'bold', marginBottom: '20px' }}>
+                      ヒントを見てお題を当ててください！
                     </p>
-                  </>
+                    <button
+                      onClick={revealNextHint}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        background: '#F39C12',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '1.1rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        marginBottom: '20px',
+                      }}
+                    >
+                      📌 最初のヒントを見る
+                    </button>
+                  </div>
                 ) : (
-                  <>
-                    <h2 style={{ color: '#E74C3C', marginBottom: '15px' }}>👑 親のターン</h2>
-                    <p style={{ color: '#F39C12', fontWeight: 'bold', marginBottom: '15px' }}>
-                      子たちのヒントを見てお題を当ててください！
-                    </p>
-                    <div style={{ marginBottom: '20px' }}>
-                      <h4 style={{ color: '#2C3E50', marginBottom: '10px' }}>出されたヒント</h4>
-                      {currentRoundData.hints.map((hint, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            background: 'linear-gradient(135deg, rgba(243, 156, 18, 0.1), rgba(231, 76, 60, 0.1))',
-                            padding: '15px',
-                            marginBottom: '10px',
-                            borderRadius: '6px',
-                            borderLeft: '4px solid #F39C12',
-                          }}
-                        >
-                          <div style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '5px', color: '#2C3E50' }}>
-                            #{hint.order} {hint.text}
-                          </div>
-                          <div style={{ color: '#7F8C8D', fontSize: '0.9rem' }}>
-                            {hint.charCount}字 → {hint.score}点
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '2px solid #ddd' }}>
-                      <h4 style={{ color: '#2C3E50', marginBottom: '10px' }}>答えを入力</h4>
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <input
-                          type="text"
-                          value={answerText}
-                          onChange={(e) => setAnswerText(e.target.value)}
-                          placeholder="答えを入力"
-                          style={{
-                            flex: 1,
-                            padding: '10px',
-                            border: '2px solid #ddd',
-                            borderRadius: '6px',
-                            fontSize: '1rem',
-                          }}
-                        />
-                        <button
-                          onClick={submitAnswer}
-                          style={{
-                            padding: '10px 20px',
-                            background: '#27AE60',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontWeight: 'bold',
-                          }}
-                        >
-                          回答
-                        </button>
+                  <div>
+                    <div style={{ background: 'linear-gradient(135deg, rgba(243, 156, 18, 0.1), rgba(231, 76, 60, 0.1))', padding: '15px', marginBottom: '20px', borderRadius: '6px', borderLeft: '4px solid #F39C12' }}>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '5px', color: '#2C3E50' }}>
+                        ヒント #{revealedHintIdx + 1}
+                      </div>
+                      <div style={{ fontSize: '1.3rem', marginBottom: '10px', color: '#E74C3C' }}>
+                        {sortedHints[revealedHintIdx]?.text}
+                      </div>
+                      <div style={{ color: '#7F8C8D', fontSize: '0.9rem' }}>
+                        {sortedHints[revealedHintIdx]?.charCount}字
                       </div>
                     </div>
-                  </>
+
+                    {answerFeedback && (
+                      <div style={{ background: '#FFF3CD', padding: '15px', marginBottom: '20px', borderRadius: '6px', textAlign: 'center', fontSize: '1.5rem', fontWeight: 'bold' }}>
+                        {answerFeedback}
+                      </div>
+                    )}
+
+                    {!answerFeedback && (
+                      <>
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                          <input
+                            type="text"
+                            value={answerText}
+                            onChange={(e) => setAnswerText(e.target.value)}
+                            placeholder="答えを入力"
+                            style={{
+                              flex: 1,
+                              padding: '10px',
+                              border: '2px solid #ddd',
+                              borderRadius: '6px',
+                              fontSize: '1rem',
+                            }}
+                          />
+                          <button
+                            onClick={submitAnswer}
+                            style={{
+                              padding: '10px 20px',
+                              background: '#27AE60',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontWeight: 'bold',
+                            }}
+                          >
+                            回答
+                          </button>
+                        </div>
+
+                        {revealedHintIdx < sortedHints.length - 1 && (
+                          <button
+                            onClick={revealNextHint}
+                            style={{
+                              width: '100%',
+                              padding: '12px',
+                              background: '#F39C12',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontSize: '1rem',
+                              fontWeight: 'bold',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            📌 次のヒントを見る
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -822,7 +866,7 @@ const DenpouApp = () => {
                   <span>文字数: {hintText.length}</span>
                   {hintText.length > 0 && (
                     <span style={{ color: '#F39C12', fontWeight: 'bold' }}>
-                      予想スコア: {18 - Math.ceil(hintText.length / (currentRoundData.hints.length + 1))}
+                      予想スコア: {Math.ceil((18 - hintText.length) / (sortedHints.length + 1))}
                     </span>
                   )}
                 </div>
@@ -843,10 +887,10 @@ const DenpouApp = () => {
                   ヒントを投稿
                 </button>
 
-                {currentRoundData.hints.length > 0 && (
+                {sortedHints.length > 0 && (
                   <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '2px solid #ddd' }}>
                     <h4 style={{ color: '#2C3E50', marginBottom: '10px' }}>投稿されたヒント</h4>
-                    {currentRoundData.hints.map((hint, idx) => (
+                    {sortedHints.map((hint, idx) => (
                       <div
                         key={idx}
                         style={{
@@ -858,9 +902,9 @@ const DenpouApp = () => {
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>#{hint.order} {hint.text}</span>
+                          <span>#{idx + 1} {hint.text}</span>
                           <span style={{ color: '#7F8C8D', fontSize: '0.9rem' }}>
-                            {hint.charCount}字 → {hint.score}点
+                            {hint.charCount}字
                           </span>
                         </div>
                       </div>
@@ -885,6 +929,7 @@ const DenpouApp = () => {
                       setCurrentRound(currentRound + 1);
                       setHintText('');
                       setAnswerText('');
+                      setAnswerFeedback('');
                     }}
                     style={{
                       width: '100%',
