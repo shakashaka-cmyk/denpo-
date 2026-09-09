@@ -669,7 +669,8 @@ const DenpouApp = () => {
 
   // ゲーム画面
   if (appState === 'game' && game && game.rounds && game.rounds.length > 0) {
-    const currentRoundData = game.rounds[currentRound];
+    const currentRoundIndex = game.rounds.length - 1;
+    const currentRoundData = game.rounds[currentRoundIndex];
     const isRoundParent = playerID === currentRoundData?.parentId;
     const activePlayers = game.players.filter(p => !p.isKicked);
 
