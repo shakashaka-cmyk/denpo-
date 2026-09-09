@@ -582,6 +582,7 @@ const DenpouApp = () => {
   // 待機部屋
   if (appState === 'waiting_room' && game) {
     const activePlayers = game.players.filter(p => !p.isKicked);
+    const isPlayerParent = localStorage.getItem('denpo_isParent') === 'true';
     
     return (
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px' }}>
@@ -642,7 +643,7 @@ const DenpouApp = () => {
                   {player.name}
                   {player.playerId === playerID && ' (あなた)'}
                 </span>
-                {isParent && player.playerId !== playerID && (
+                {isPlayerParent && player.playerId !== playerID && (
                   <button
                     onClick={() => kickPlayer(player.playerId)}
                     style={{
@@ -662,7 +663,7 @@ const DenpouApp = () => {
             ))}
           </div>
 
-          {isParent && (
+          {isPlayerParent && (
             <button
               onClick={startGame}
               style={{
