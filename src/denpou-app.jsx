@@ -678,7 +678,19 @@ const DenpouApp = () => {
 
   // ゲーム画面
   if (appState === 'game' && game && game.rounds && game.rounds.length > 0) {
-    const currentRoundData = game.rounds[currentRound];
+    // 親の場合、自分が親のラウンドを表示
+    const isPlayerParent = playerID === game.players.find(p => p.playerId === playerID)?.playerId && 
+                          game.rounds.some(r => r.parentId === playerID);
+    
+    let displayRound = currentRound;
+    if (isPlayerParent) {
+      const myRoundIndex = game.rounds.findIndex(r => r.parentId === playerID && r.status !== 'finished');
+      if (myRoundIndex !== -1) {
+        displayRound = myRoundIndex;
+      }
+    }
+
+    const currentRoundData = game.rounds[displayRound];
     const isRoundParent = playerID === currentRoundData?.parentId;
     const activePlayers = game.players.filter(p => !p.isKicked);
 
