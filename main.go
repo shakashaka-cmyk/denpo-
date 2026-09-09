@@ -26,10 +26,11 @@ type Game struct {
 }
 
 type Player struct {
-	PlayerID   string `json:"playerId"`
-	Name       string `json:"name"`
-	TotalScore int    `json:"totalScore"`
-	IsKicked   bool   `json:"isKicked"`
+	PlayerID       string `json:"playerId"`
+	Name           string `json:"name"`
+	TotalScore     int    `json:"totalScore"`
+	IsKicked       bool   `json:"isKicked"`
+	HintSubmitted  bool   `json:"hintSubmitted"`
 }
 
 type Round struct {
@@ -44,11 +45,11 @@ type Round struct {
 	AnsweredAt       *time.Time     `json:"answeredAt"`
 	RevealedHintIdx  int            `json:"revealedHintIdx"`
 	CorrectHintIdx   int            `json:"correctHintIdx"`
-	HintSubmitters   map[string]bool `json:"hintSubmitters"` // playerID -> 投稿済みフラグ
 }
 
 type Hint struct {
 	PlayerID  string    `json:"playerId"`
+	PlayerName string   `json:"playerName"`
 	Text      string    `json:"text"`
 	CharCount int       `json:"charCount"`
 	Order     int       `json:"order"`
@@ -212,10 +213,11 @@ func CreateGame(w http.ResponseWriter, r *http.Request) {
 		GameID: gameID,
 		Players: []Player{
 			{
-				PlayerID:   playerID,
-				Name:       req.Name,
-				TotalScore: 0,
-				IsKicked:   false,
+				PlayerID:      playerID,
+				Name:          req.Name,
+				TotalScore:    0,
+				IsKicked:      false,
+				HintSubmitted: false,
 			},
 		},
 		Status:    "waiting",
@@ -281,10 +283,11 @@ func JoinGame(w http.ResponseWriter, r *http.Request) {
 
 	playerID := uuid.New().String()
 	player := Player{
-		PlayerID:   playerID,
-		Name:       req.Name,
-		TotalScore: 0,
-		IsKicked:   false,
+		PlayerID:      playerID,
+		Name:          req.Name,
+		TotalScore:    0,
+		IsKicked:      false,
+		HintSubmitted: false,
 	}
 	room.Game.Players = append(room.Game.Players, player)
 
@@ -324,28 +327,25 @@ func StartGame(w http.ResponseWriter, r *http.Request) {
 	for i := 0; i < 2; i++ {
 		for _, player := range activePlayers {
 			answer := topics[rand.Intn(len(topics))]
-			hintSubmitters := make(map[string]bool)
-			// 親以外のプレイヤーをヒント投稿予定者として登録
-			for _, p := range activePlayers {
-				if p.PlayerID != player.PlayerID {
-					hintSubmitters[p.PlayerID] = false
-				}
-			}
 			round := Round{
-				RoundNumber:     len(room.Game.Rounds) + 1,
-				ParentID:        player.PlayerID,
-				Answer:          answer,
-				Status:          "hint_phase",
-				Hints:           make([]Hint, 0),
-				CorrectAnswer:   false,
-				Scores:          make(map[string]int),
-				CreatedAt:       time.Now(),
+				RoundNumber:    len(room.Game.Rounds) + 1,
+				ParentID:       player.PlayerID,
+				Answer:         answer,
+				Status:         "hint_phase",
+				Hints:          make([]Hint, 0),
+				CorrectAnswer:  false,
+				Scores:         make(map[string]int),
+				CreatedAt:      time.Now(),
 				RevealedHintIdx: -1,
-				CorrectHintIdx:  -1,
-				HintSubmitters:  hintSubmitters,
+				CorrectHintIdx: -1,
 			}
 			room.Game.Rounds = append(room.Game.Rounds, round)
 		}
+	}
+
+	// ラウンド開始時に全プレイヤーのHintSubmittedをリセット
+	for i := range room.Game.Players {
+		room.Game.Players[i].HintSubmitted = false
 	}
 
 	room.Game.Status = "playing"
@@ -383,29 +383,36 @@ func SubmitHint(w http.ResponseWriter, r *http.Request) {
 
 	currentRound := &room.Game.Rounds[len(room.Game.Rounds)-1]
 
-	// 既に投稿済みか確認
-	if submitted, exists := currentRound.HintSubmitters[playerID]; exists && submitted {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Already submitted hint\n"))
-		return
+	// プレイヤーの情報を取得
+	var playerName string
+	for _, p := range room.Game.Players {
+		if p.PlayerID == playerID {
+			if p.HintSubmitted {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte("Already submitted hint\n"))
+				return
+			}
+			playerName = p.Name
+			p.HintSubmitted = true
+			break
+		}
 	}
 
 	hint := Hint{
-		PlayerID:  playerID,
-		Text:      req.Text,
-		CharCount: len([]rune(req.Text)),
-		Order:     len(currentRound.Hints) + 1,
-		Score:     0,
-		CreatedAt: time.Now(),
+		PlayerID:   playerID,
+		PlayerName: playerName,
+		Text:       req.Text,
+		CharCount:  len([]rune(req.Text)),
+		Order:      len(currentRound.Hints) + 1,
+		Score:      0,
+		CreatedAt:  time.Now(),
 	}
 	currentRound.Hints = append(currentRound.Hints, hint)
-	currentRound.HintSubmitters[playerID] = true
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(room.Game)
 }
 
-// RevealNextHint: 親が「次のヒントを見る」ボタンを押した時
 func RevealNextHint(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	gameID := vars["gameId"]
@@ -499,8 +506,8 @@ func SubmitAnswer(w http.ResponseWriter, r *http.Request) {
 			score := int(math.Ceil(float64(18-charCount) / float64(hintOrder)))
 
 			// 親と正解ヒント提出者に点数を与える
-			currentRound.Scores[playerID] = score        // 親
-			currentRound.Scores[correctHint.PlayerID] = score // ヒント提出者
+			currentRound.Scores[playerID] = score              // 親
+			currentRound.Scores[correctHint.PlayerID] = score  // ヒント提出者
 
 			// 総スコアに加算
 			for i := range room.Game.Players {
@@ -535,11 +542,22 @@ func EndGame(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	gameID := vars["gameId"]
 
-	roomsMu.Lock()
-	delete(rooms, gameID)
-	roomsMu.Unlock()
+	roomsMu.RLock()
+	room, exists := rooms[gameID]
+	roomsMu.RUnlock()
 
-	w.WriteHeader(http.StatusOK)
+	if !exists {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	room.Mu.Lock()
+	defer room.Mu.Unlock()
+
+	room.Game.Status = "finished"
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(room.Game)
 }
 
 func KickPlayer(w http.ResponseWriter, r *http.Request) {
@@ -578,7 +596,6 @@ func generateShortID() string {
 	return fmt.Sprintf("%04d", rand.Intn(10000))
 }
 
-// normalizeText: 表記ズレを統一
 func normalizeText(text string) string {
 	text = strings.TrimSpace(text)
 	text = hiraganaToKatakana(text)
@@ -586,7 +603,6 @@ func normalizeText(text string) string {
 	return text
 }
 
-// hiraganaToKatakana: ひらがなをカタカナに変換
 func hiraganaToKatakana(text string) string {
 	result := []rune{}
 	for _, r := range text {
@@ -599,7 +615,6 @@ func hiraganaToKatakana(text string) string {
 	return string(result)
 }
 
-// removeSpecialChars: 特殊文字削除
 func removeSpecialChars(text string) string {
 	result := []rune{}
 	for _, r := range text {
@@ -615,7 +630,6 @@ func removeSpecialChars(text string) string {
 	return string(result)
 }
 
-// sortHints: ヒントを文字数でソート
 func sortHints(hints []Hint) {
 	for i := 0; i < len(hints); i++ {
 		for j := i + 1; j < len(hints); j++ {

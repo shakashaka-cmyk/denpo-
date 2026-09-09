@@ -668,7 +668,7 @@ const DenpouApp = () => {
     const revealedHintIdx = currentRoundData?.revealedHintIdx ?? -1;
 
     // 全員ヒント投稿済みか確認
-    const allHintsSubmitted = childPlayers.every(player => currentRoundData?.hintSubmitters[player.playerId]);
+    const allHintsSubmitted = activePlayers.filter(p => p.playerId !== currentRoundData?.parentId).every(player => player.hintSubmitted);
     
     // 現在のプレイヤーが既に投稿済みか確認
     const currentPlayerHintSubmitted = currentRoundData?.hintSubmitters[playerID];
@@ -739,16 +739,35 @@ const DenpouApp = () => {
               <div>
                 <h2 style={{ color: '#E74C3C', marginBottom: '15px' }}>👑 親のターン</h2>
                 
-                {!allHintsSubmitted ? (
-                  <div style={{ background: '#FFF3CD', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '2px solid #F39C12' }}>
-                    <p style={{ color: '#F39C12', fontWeight: 'bold', margin: 0 }}>
-                      ⏳ 全員がヒントを投稿するまで待機中...
-                    </p>
-                    <p style={{ color: '#666', fontSize: '0.9rem', margin: '10px 0 0 0' }}>
-                      投稿済み: {Object.values(currentRoundData?.hintSubmitters || {}).filter(Boolean).length} / {childPlayers.length}
-                    </p>
+                {/* 投稿状況 */}
+                <div style={{ background: '#FFF3CD', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '2px solid #F39C12' }}>
+                  <p style={{ color: '#F39C12', fontWeight: 'bold', margin: '0 0 10px 0' }}>⏳ ヒント投稿状況</p>
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    {activePlayers.map((player) => (
+                      player.playerId !== currentRoundData?.parentId && (
+                        <div
+                          key={player.playerId}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: '8px',
+                            background: '#fff',
+                            borderRadius: '4px',
+                          }}
+                        >
+                          <span style={{ flex: 1, fontWeight: 'bold', color: '#2C3E50' }}>
+                            {player.name}
+                          </span>
+                          <span style={{ fontSize: '1.2rem' }}>
+                            {player.hintSubmitted ? '✅' : '⏳'}
+                          </span>
+                        </div>
+                      )
+                    ))}
                   </div>
-                ) : (
+                </div>
+                
+                {allHintsSubmitted ? (
                   <div>
                     {revealedHintIdx === -1 ? (
                       <div>
@@ -778,6 +797,9 @@ const DenpouApp = () => {
                         <div style={{ background: 'linear-gradient(135deg, rgba(243, 156, 18, 0.1), rgba(231, 76, 60, 0.1))', padding: '15px', marginBottom: '20px', borderRadius: '6px', borderLeft: '4px solid #F39C12' }}>
                           <div style={{ fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '5px', color: '#2C3E50' }}>
                             ヒント #{revealedHintIdx + 1}
+                          </div>
+                          <div style={{ fontSize: '1.1rem', marginBottom: '8px', color: '#555' }}>
+                            <strong>{sortedHints[revealedHintIdx]?.playerName}</strong> より
                           </div>
                           <div style={{ fontSize: '1.3rem', marginBottom: '10px', color: '#E74C3C' }}>
                             {sortedHints[revealedHintIdx]?.text}
@@ -848,6 +870,12 @@ const DenpouApp = () => {
                       </div>
                     )}
                   </div>
+                ) : (
+                  <div style={{ background: '#FFF3CD', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '2px solid #F39C12' }}>
+                    <p style={{ color: '#F39C12', fontWeight: 'bold', margin: 0 }}>
+                      ⏳ 全員がヒントを投稿するまで待機中...
+                    </p>
+                  </div>
                 )}
               </div>
             )}
@@ -916,7 +944,7 @@ const DenpouApp = () => {
 
                 {sortedHints.length > 0 && (
                   <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '2px solid #ddd' }}>
-                    <h4 style={{ color: '#2C3E50', marginBottom: '10px' }}>投稿されたヒント</h4>
+                    <h4 style={{ color: '#2C3E50', marginBottom: '10px' }}>投稿されたヒント（文字数順）</h4>
                     {sortedHints.map((hint, idx) => (
                       <div
                         key={idx}
@@ -928,9 +956,16 @@ const DenpouApp = () => {
                           borderLeft: '4px solid #F39C12',
                         }}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>#{idx + 1} {hint.text}</span>
-                          <span style={{ color: '#7F8C8D', fontSize: '0.9rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ fontWeight: 'bold', color: '#2C3E50', marginBottom: '5px' }}>
+                              #{idx + 1} {hint.playerName}
+                            </div>
+                            <div style={{ color: '#555', fontSize: '0.95rem' }}>
+                              {hint.text}
+                            </div>
+                          </div>
+                          <span style={{ color: '#7F8C8D', fontSize: '1rem', fontWeight: 'bold', whiteSpace: 'nowrap', marginLeft: '15px' }}>
                             {hint.charCount}字
                           </span>
                         </div>
