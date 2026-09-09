@@ -385,7 +385,7 @@ func SubmitHint(w http.ResponseWriter, r *http.Request) {
 
 	// プレイヤーの情報を取得
 	var playerName string
-	for _, p := range room.Game.Players {
+	for i, p := range room.Game.Players {
 		if p.PlayerID == playerID {
 			if p.HintSubmitted {
 				w.WriteHeader(http.StatusBadRequest)
@@ -393,7 +393,7 @@ func SubmitHint(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			playerName = p.Name
-			p.HintSubmitted = true
+			room.Game.Players[i].HintSubmitted = true
 			break
 		}
 	}
@@ -534,6 +534,9 @@ func SubmitAnswer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// 新しいラウンドが始まるときにリセット
+	resetHintSubmittedForNewRound(room.Game)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(room.Game)
 }
@@ -589,6 +592,36 @@ func KickPlayer(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(room.Game)
+}
+
+// resetHintSubmittedForNewRound: 新しいラウンドが始まるときにリセット
+func resetHintSubmittedForNewRound(game *Game) {
+	if len(game.Rounds) == 0 {
+		return
+	}
+	
+	currentRound := &game.Rounds[len(game.Rounds)-1]
+	currentRoundNumber := currentRound.RoundNumber
+	
+	// 同じラウンド番号の他のラウンドが全て終了したかチェック
+	roundsOfSameNumber := 0
+	finishedRoundsOfSameNumber := 0
+	
+	for _, r := range game.Rounds {
+		if r.RoundNumber == currentRoundNumber {
+			roundsOfSameNumber++
+			if r.Status == "finished" {
+				finishedRoundsOfSameNumber++
+			}
+		}
+	}
+	
+	// 全て終了したら次のラウンドのために HintSubmitted をリセット
+	if roundsOfSameNumber == finishedRoundsOfSameNumber && roundsOfSameNumber > 0 {
+		for i := range game.Players {
+			game.Players[i].HintSubmitted = false
+		}
+	}
 }
 
 // Helper functions
