@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -45,6 +44,7 @@ type Round struct {
 	AnsweredAt       *time.Time     `json:"answeredAt"`
 	RevealedHintIdx  int            `json:"revealedHintIdx"`
 	CorrectHintIdx   int            `json:"correctHintIdx"`
+	HintSubmitters   map[string]bool `json:"hintSubmitters"` // playerID -> 投稿済みフラグ
 }
 
 type Hint struct {
@@ -303,6 +303,13 @@ func StartGame(w http.ResponseWriter, r *http.Request) {
 	for i := 0; i < 2; i++ {
 		for _, player := range activePlayers {
 			answer := topics[rand.Intn(len(topics))]
+			hintSubmitters := make(map[string]bool)
+			// 親以外のプレイヤーをヒント投稿予定者として登録
+			for _, p := range activePlayers {
+				if p.PlayerID != player.PlayerID {
+					hintSubmitters[p.PlayerID] = false
+				}
+			}
 			round := Round{
 				RoundNumber:     len(room.Game.Rounds) + 1,
 				ParentID:        player.PlayerID,
@@ -314,6 +321,7 @@ func StartGame(w http.ResponseWriter, r *http.Request) {
 				CreatedAt:       time.Now(),
 				RevealedHintIdx: -1,
 				CorrectHintIdx:  -1,
+				HintSubmitters:  hintSubmitters,
 			}
 			room.Game.Rounds = append(room.Game.Rounds, round)
 		}
@@ -354,6 +362,13 @@ func SubmitHint(w http.ResponseWriter, r *http.Request) {
 
 	currentRound := &room.Game.Rounds[len(room.Game.Rounds)-1]
 
+	// 既に投稿済みか確認
+	if submitted, exists := currentRound.HintSubmitters[playerID]; exists && submitted {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Already submitted hint\n"))
+		return
+	}
+
 	hint := Hint{
 		PlayerID:  playerID,
 		Text:      req.Text,
@@ -363,6 +378,7 @@ func SubmitHint(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: time.Now(),
 	}
 	currentRound.Hints = append(currentRound.Hints, hint)
+	currentRound.HintSubmitters[playerID] = true
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(room.Game)
@@ -543,15 +559,9 @@ func generateShortID() string {
 
 // normalizeText: 表記ズレを統一
 func normalizeText(text string) string {
-	// 前後の空白削除
 	text = strings.TrimSpace(text)
-
-	// ひらがな → カタカナ
 	text = hiraganaToKatakana(text)
-
-	// 特殊文字削除（・。！？など）
 	text = removeSpecialChars(text)
-
 	return text
 }
 
@@ -560,7 +570,6 @@ func hiraganaToKatakana(text string) string {
 	result := []rune{}
 	for _, r := range text {
 		if r >= 'ぁ' && r <= 'ん' {
-			// ひらがなをカタカナに変換（差分は0x60）
 			result = append(result, r+0x60)
 		} else {
 			result = append(result, r)
@@ -573,9 +582,8 @@ func hiraganaToKatakana(text string) string {
 func removeSpecialChars(text string) string {
 	result := []rune{}
 	for _, r := range text {
-		// 日本語、英数字、空白のみを残す
-		if (r >= 0x3000 && r <= 0x309f) || // ひらがな範囲
-			(r >= 0x30a0 && r <= 0x30ff) || // カタカナ範囲
+		if (r >= 0x3000 && r <= 0x309f) ||
+			(r >= 0x30a0 && r <= 0x30ff) ||
 			(r >= '0' && r <= '9') ||
 			(r >= 'A' && r <= 'Z') ||
 			(r >= 'a' && r <= 'z') ||
