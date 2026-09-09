@@ -311,6 +311,28 @@ const DenpouApp = () => {
     }
   };
 
+  const exitRoom = () => {
+    if (window.confirm('本当に部屋を退出しますか？')) {
+      localStorage.removeItem('denpo_gameID');
+      localStorage.removeItem('denpo_playerID');
+      localStorage.removeItem('denpo_isParent');
+      setAppState('lobby');
+      setGameID(null);
+      setPlayerID(null);
+      setGame(null);
+      setParentName('');
+      setJoinGameID('');
+      setPlayerName('');
+      setIsParent(false);
+      setShowModeSelect(false);
+      setHintText('');
+      setAnswerText('');
+      setErrorMsg('');
+      setAnswerFeedback('');
+      setCurrentRound(0);
+    }
+  };
+
   // ロビー画面
   if (appState === 'lobby') {
     if (showModeSelect) {
@@ -658,6 +680,24 @@ const DenpouApp = () => {
               ゲームを開始
             </button>
           )}
+
+          <button
+            onClick={exitRoom}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: '#E74C3C',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '1rem',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              marginTop: '10px',
+            }}
+          >
+            部屋を退出
+          </button>
         </div>
 
         {errorMsg && (
@@ -1118,20 +1158,7 @@ const DenpouApp = () => {
         </div>
 
         <button
-          onClick={() => {
-            localStorage.removeItem('denpo_gameID');
-            localStorage.removeItem('denpo_playerID');
-            localStorage.removeItem('denpo_isParent');
-            setAppState('lobby');
-            setGameID(null);
-            setPlayerID(null);
-            setGame(null);
-            setParentName('');
-            setJoinGameID('');
-            setPlayerName('');
-            setIsParent(false);
-            setShowModeSelect(false);
-          }}
+          onClick={exitRoom}
           style={{
             width: '100%',
             padding: '12px',
@@ -1144,7 +1171,7 @@ const DenpouApp = () => {
             cursor: 'pointer',
           }}
         >
-          ロビーに戻る
+          部屋を退出
         </button>
       </div>
     );
