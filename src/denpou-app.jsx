@@ -84,7 +84,7 @@ const DenpouApp = () => {
       };
 
       pollGame();
-      const interval = setInterval(pollGame, 1000);
+      const interval = setInterval(pollGame, 500);
       return () => clearInterval(interval);
     }
   }, [gameID, playerID, appState]);
@@ -239,6 +239,8 @@ const DenpouApp = () => {
         return;
       }
 
+      const updatedGame = await response.json();
+      setGame(updatedGame);
       setHintText('');
       setErrorMsg('');
     } catch (err) {
