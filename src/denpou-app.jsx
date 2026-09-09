@@ -96,7 +96,7 @@ const DenpouApp = () => {
       const interval = setInterval(pollGame, 500);
       return () => clearInterval(interval);
     }
-  }, [gameID, playerID, appState]);
+  }, [gameID, playerID, appState, currentRound]);
 
   const createGame = async () => {
     if (!parentName.trim()) {
