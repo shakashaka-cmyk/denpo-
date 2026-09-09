@@ -146,6 +146,7 @@ func init() {
 func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/api/games", CreateGame).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/games", ListGames).Methods("GET", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}", GetGame).Methods("GET", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}/join", JoinGame).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}/start", StartGame).Methods("POST", "OPTIONS")
@@ -175,6 +176,21 @@ func corsMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func ListGames(w http.ResponseWriter, r *http.Request) {
+	roomsMu.RLock()
+	defer roomsMu.RUnlock()
+
+	games := make([]*Game, 0)
+	for _, room := range rooms {
+		room.Mu.RLock()
+		games = append(games, room.Game)
+		room.Mu.RUnlock()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(games)
 }
 
 func CreateGame(w http.ResponseWriter, r *http.Request) {
