@@ -385,6 +385,7 @@ func SubmitHint(w http.ResponseWriter, r *http.Request) {
 
 	// プレイヤーの情報を取得
 	var playerName string
+	isPlayerParent := false
 	for i, p := range room.Game.Players {
 		if p.PlayerID == playerID {
 			if p.HintSubmitted {
@@ -398,19 +399,31 @@ func SubmitHint(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	hint := Hint{
-		PlayerID:   playerID,
-		PlayerName: playerName,
-		Text:       req.Text,
-		CharCount:  len([]rune(req.Text)),
-		Order:      len(currentRound.Hints) + 1,
-		Score:      0,
-		CreatedAt:  time.Now(),
+	// 自分が親ではない「実行中のラウンド」を探す
+	for i := range room.Game.Rounds {
+		round := &room.Game.Rounds[i]
+		if round.Status == "hint_phase" && round.ParentID != playerID {
+			// このラウンドに投稿
+			isPlayerParent = false
+			hint := Hint{
+				PlayerID:   playerID,
+				PlayerName: playerName,
+				Text:       req.Text,
+				CharCount:  len([]rune(req.Text)),
+				Order:      len(round.Hints) + 1,
+				Score:      0,
+				CreatedAt:  time.Now(),
+			}
+			round.Hints = append(round.Hints, hint)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(room.Game)
+			return
+		}
 	}
-	currentRound.Hints = append(currentRound.Hints, hint)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(room.Game)
+	// ラウンドが見つからない場合
+	w.WriteHeader(http.StatusBadRequest)
+	w.Write([]byte("No active round found\n"))
 }
 
 func RevealNextHint(w http.ResponseWriter, r *http.Request) {
