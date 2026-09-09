@@ -670,7 +670,8 @@ const DenpouApp = () => {
     const allHintsSubmitted = activePlayers.filter(p => p.playerId !== currentRoundData?.parentId).every(player => player.hintSubmitted);
     
     // 現在のプレイヤーが既に投稿済みか確認
-    const currentPlayerHintSubmitted = currentRoundData?.hintSubmitters[playerID];
+    const currentPlayer = game.players.find(p => p.playerId === playerID);
+    const currentPlayerHintSubmitted = currentPlayer?.hintSubmitted ?? false;
 
     return (
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px' }}>
