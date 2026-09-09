@@ -250,10 +250,21 @@ const DenpouApp = () => {
 
   const revealNextHint = async () => {
     try {
-      await fetch(`${API_BASE}/games/${gameID}/reveal`, {
+      const response = await fetch(`${API_BASE}/games/${gameID}/reveal`, {
         method: 'POST',
-        headers: { 'X-Player-ID': playerID },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Player-ID': playerID,
+        },
       });
+      
+      if (!response.ok) {
+        setErrorMsg('失敗しました');
+        return;
+      }
+
+      const updatedGame = await response.json();
+      setGame(updatedGame);
       setAnswerFeedback('');
     } catch (err) {
       setErrorMsg('失敗しました');
