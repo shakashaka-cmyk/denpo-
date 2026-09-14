@@ -736,6 +736,9 @@ const DenpouApp = () => {
 
     // デバッグ用：currentRound を表示
     console.log('currentRound:', currentRound, 'roundNumber:', currentRoundData?.roundNumber, 'parentId:', currentRoundData?.parentId);
+    console.log('playerID:', playerID, 'isRoundParent:', playerID === currentRoundData?.parentId);
+    console.log('isPlayerParent:', isPlayerParent);
+    console.log('allHintsSubmitted:', allHintsSubmitted);
 
     // ヒントを文字数でソート
     const sortedHints = currentRoundData?.hints ? [...currentRoundData.hints].sort((a, b) => a.charCount - b.charCount) : [];
@@ -750,6 +753,13 @@ const DenpouApp = () => {
 
     return (
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px' }}>
+        {/* デバッグ情報 */}
+        <div style={{ background: '#FFF3CD', padding: '10px', borderRadius: '6px', marginBottom: '10px', fontSize: '0.85rem', fontFamily: 'monospace', color: '#856404' }}>
+          <div>🔍 yourID: {playerID.substring(0, 8)}... | parentID: {currentRoundData?.parentId.substring(0, 8)}... | isRoundParent: {String(playerID === currentRoundData?.parentId)}</div>
+          <div>isPlayerParent: {String(isPlayerParent)} | allHintsSubmitted: {String(allHintsSubmitted)}</div>
+          <div>players: {game.players.map(p => `${p.name}(${p.hintSubmitted ? '✅' : '⏳'})`).join(', ')}</div>
+        </div>
+
         <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 5px 20px rgba(0,0,0,0.08)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h1 style={{ fontSize: '2rem', color: '#E74C3C', margin: 0 }}>デンポー！！</h1>
