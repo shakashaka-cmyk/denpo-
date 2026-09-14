@@ -738,7 +738,6 @@ const DenpouApp = () => {
     console.log('currentRound:', currentRound, 'roundNumber:', currentRoundData?.roundNumber, 'parentId:', currentRoundData?.parentId);
     console.log('playerID:', playerID, 'isRoundParent:', playerID === currentRoundData?.parentId);
     console.log('isPlayerParent:', isPlayerParent);
-    console.log('allHintsSubmitted:', allHintsSubmitted);
 
     // ヒントを文字数でソート
     const sortedHints = currentRoundData?.hints ? [...currentRoundData.hints].sort((a, b) => a.charCount - b.charCount) : [];
@@ -747,6 +746,8 @@ const DenpouApp = () => {
     // 全員ヒント投稿済みか確認
     const allHintsSubmitted = activePlayers.filter(p => p.playerId !== currentRoundData?.parentId).every(player => player.hintSubmitted);
     
+    console.log('allHintsSubmitted:', allHintsSubmitted);
+
     // 現在のプレイヤーが既に投稿済みか確認
     const currentPlayer = game.players.find(p => p.playerId === playerID);
     const currentPlayerHintSubmitted = currentPlayer?.hintSubmitted ?? false;
