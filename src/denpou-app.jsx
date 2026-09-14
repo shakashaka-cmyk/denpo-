@@ -766,6 +766,7 @@ const DenpouApp = () => {
           <div>🔍 yourID: {playerID.substring(0, 8)}... | parentID: {currentRoundData?.parentId.substring(0, 8)}... | isRoundParent: {String(playerID === currentRoundData?.parentId)}</div>
           <div>isPlayerParent: {String(isPlayerParent)} | allHintsSubmitted: {String(allHintsSubmitted)}</div>
           <div>players: {game.players.map(p => `${p.name}(${p.hintSubmitted ? '✅' : '⏳'})`).join(', ')}</div>
+          <div>rounds: {game.rounds.map((r, i) => `R${r.roundNumber}:${r.parentId.substring(0, 8)}...`).join(' | ')}</div>
         </div>
 
         <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 5px 20px rgba(0,0,0,0.08)' }}>
