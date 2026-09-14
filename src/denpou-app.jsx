@@ -724,9 +724,16 @@ const DenpouApp = () => {
     
     let displayRound = currentRound;
     if (isPlayerParent) {
+      // 親：自分が親のラウンドを表示
       const myRoundIndex = game.rounds.findIndex(r => r.parentId === playerID && r.status !== 'finished');
       if (myRoundIndex !== -1) {
         displayRound = myRoundIndex;
+      }
+    } else {
+      // 子：自分が親ではない、進行中のラウンドを表示
+      const childRoundIndex = game.rounds.findIndex(r => r.parentId !== playerID && r.status !== 'finished');
+      if (childRoundIndex !== -1) {
+        displayRound = childRoundIndex;
       }
     }
 
