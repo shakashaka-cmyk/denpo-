@@ -395,17 +395,6 @@ const DenpouApp = () => {
     }
   }
 
-  // 通常のゲーム画面に戻る
-  if (appState === 'game') {
-    const updatedGame = await response.json();
-      setGame(updatedGame);
-      setHintText('');
-      setErrorMsg('');
-    } catch (err) {
-      setErrorMsg('失敗しました');
-    }
-  };
-
   const revealNextHint = async () => {
     try {
       const response = await fetch(`${API_BASE}/games/${gameID}/reveal`, {
