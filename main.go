@@ -325,13 +325,20 @@ func StartGame(w http.ResponseWriter, r *http.Request) {
 
 	room.Game.Rounds = make([]Round, 0)
 	for i := 0; i < 2; i++ {
-		for _, player := range activePlayers {
+		for j, player := range activePlayers {
 			answer := topics[rand.Intn(len(topics))]
+			
+			// 最初のラウンドだけ hint_phase、他は waiting
+			status := "waiting"
+			if len(room.Game.Rounds) == 0 {
+				status = "hint_phase"
+			}
+			
 			round := Round{
 				RoundNumber:    len(room.Game.Rounds) + 1,
 				ParentID:       player.PlayerID,
 				Answer:         answer,
-				Status:         "hint_phase",
+				Status:         status,
 				Hints:          make([]Hint, 0),
 				CorrectAnswer:  false,
 				Scores:         make(map[string]int),
@@ -415,6 +422,16 @@ func SubmitHint(w http.ResponseWriter, r *http.Request) {
 				CreatedAt:  time.Now(),
 			}
 			round.Hints = append(round.Hints, hint)
+			
+			// 全員が投稿したか確認して、次のラウンド開始時にリセット
+			allSubmitted := true
+			for _, player := range room.Game.Players {
+				if !player.IsKicked && player.PlayerID != round.ParentID && !player.HintSubmitted {
+					allSubmitted = false
+					break
+				}
+			}
+			
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(room.Game)
 			return
@@ -544,6 +561,19 @@ func SubmitAnswer(w http.ResponseWriter, r *http.Request) {
 
 		if allFinished {
 			room.Game.Status = "finished"
+		} else {
+			// 次のラウンドを hint_phase に変更
+			for i := range room.Game.Rounds {
+				if room.Game.Rounds[i].Status == "waiting" {
+					room.Game.Rounds[i].Status = "hint_phase"
+					break
+				}
+			}
+			
+			// 全プレイヤーの HintSubmitted をリセット
+			for i := range room.Game.Players {
+				room.Game.Players[i].HintSubmitted = false
+			}
 		}
 	}
 
