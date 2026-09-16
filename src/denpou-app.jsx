@@ -1135,69 +1135,154 @@ const DenpouApp = () => {
             {!isRoundParent && currentRoundData?.status === 'hint_phase' && (
               <div>
                 <h2 style={{ color: '#E74C3C', marginBottom: '15px' }}>💡 ヒント出題フェーズ</h2>
-                <div style={{ background: '#FFF3CD', padding: '15px', borderRadius: '8px', marginBottom: '15px', border: '2px solid #F39C12' }}>
-                  <p style={{ color: '#F39C12', fontWeight: 'bold', margin: '0 0 8px 0' }}>📌 お題</p>
-                  <p style={{ color: '#E74C3C', fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>
-                    {currentRoundData?.answer}
-                  </p>
-                </div>
-
-                {currentPlayerHintSubmitted ? (
-                  <div style={{ background: '#E8F5E9', padding: '15px', borderRadius: '6px', marginBottom: '15px', border: '2px solid #27AE60' }}>
-                    <p style={{ color: '#27AE60', fontWeight: 'bold', margin: 0 }}>✅ ヒントを投稿済みです</p>
-                  </div>
-                ) : (
-                  <div>
-                    <p style={{ color: '#F39C12', fontWeight: 'bold', marginBottom: '15px' }}>
-                      このお題を当てるようにヒントを出してください（文字数が少ないほど高得点！）
+                
+                {/* お題決定フェーズ */}
+                {currentRoundData?.answerMode === 'manual' && !currentRoundData?.answer && (
+                  <div style={{ background: '#FFF3CD', padding: '20px', borderRadius: '8px', marginBottom: '15px', border: '2px solid #F39C12' }}>
+                    <p style={{ color: '#F39C12', fontWeight: 'bold', marginBottom: '15px', fontSize: '1.1rem' }}>
+                      📌 このラウンドのお題を決めますか？
                     </p>
-                    <textarea
-                      value={hintText}
-                      onChange={(e) => setHintText(e.target.value)}
-                      placeholder="ヒントを入力..."
-                      style={{
-                        width: '100%',
-                        minHeight: '80px',
-                        padding: '12px',
-                        marginBottom: '10px',
-                        border: '2px solid #ddd',
-                        borderRadius: '6px',
-                        fontSize: '1rem',
-                        fontFamily: 'inherit',
-                        resize: 'vertical',
-                      }}
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', fontSize: '0.9rem', color: '#2C3E50' }}>
-                      <span>文字数: {hintText.length}</span>
-                      {hintText.length > 0 && (
-                        <span style={{ color: '#F39C12', fontWeight: 'bold' }}>
-                          予想スコア: {Math.ceil((18 - hintText.length) / (sortedHints.length + 1))}
-                        </span>
-                      )}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' }}>
+                      <button
+                        onClick={() => setTopicInput(topicInput === 'random' ? '' : 'random')}
+                        style={{
+                          padding: '15px',
+                          border: topicInput === 'random' ? '3px solid #F39C12' : '2px solid #ddd',
+                          background: topicInput === 'random' ? '#FFF8E7' : '#fff',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          fontSize: '0.9rem',
+                          color: '#2C3E50',
+                        }}
+                      >
+                        🎲 ランダムで待つ
+                      </button>
+                      <button
+                        onClick={() => setTopicInput(topicInput === 'manual' ? '' : 'manual')}
+                        style={{
+                          padding: '15px',
+                          border: topicInput === 'manual' ? '3px solid #F39C12' : '2px solid #ddd',
+                          background: topicInput === 'manual' ? '#FFF8E7' : '#fff',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          fontSize: '0.9rem',
+                          color: '#2C3E50',
+                        }}
+                      >
+                        ✍️ 自分で決める
+                      </button>
                     </div>
-                    <button
-                      onClick={submitHint}
-                      disabled={!hintText.trim()}
-                      style={{
-                        width: '100%',
-                        padding: '12px',
-                        background: hintText.trim() ? '#F39C12' : '#ccc',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: hintText.trim() ? 'pointer' : 'not-allowed',
-                        fontWeight: 'bold',
-                      }}
-                    >
-                      ヒントを投稿
-                    </button>
+
+                    {topicInput === 'manual' && (
+                      <div>
+                        <input
+                          type="text"
+                          value={hintText}
+                          onChange={(e) => setHintText(e.target.value)}
+                          placeholder="お題を入力"
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            border: '2px solid #ddd',
+                            borderRadius: '6px',
+                            fontSize: '1rem',
+                            marginBottom: '10px',
+                          }}
+                        />
+                        <button
+                          onClick={() => submitTopic(hintText)}
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            background: '#27AE60',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          決定
+                        </button>
+                      </div>
+                    )}
+
+                    {topicInput === 'random' && (
+                      <p style={{ color: '#7F8C8D', fontSize: '0.95rem', margin: 0 }}>
+                        他の人がお題を決めるまで待機中...
+                      </p>
+                    )}
                   </div>
                 )}
 
-                {sortedHints.length > 0 && (
-                  <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '2px solid #ddd' }}>
-                    <h4 style={{ color: '#2C3E50', marginBottom: '10px' }}>投稿されたヒント（文字数順）</h4>
-                    {sortedHints.map((hint, idx) => (
+                {/* お題が決まったら表示 */}
+                {currentRoundData?.answer && (
+                  <>
+                    <div style={{ background: '#FFF3CD', padding: '15px', borderRadius: '8px', marginBottom: '15px', border: '2px solid #F39C12' }}>
+                      <p style={{ color: '#F39C12', fontWeight: 'bold', margin: '0 0 8px 0' }}>📌 お題</p>
+                      <p style={{ color: '#E74C3C', fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>
+                        {currentRoundData?.answer}
+                      </p>
+                    </div>
+
+                    {currentPlayerHintSubmitted ? (
+                      <div style={{ background: '#E8F5E9', padding: '15px', borderRadius: '6px', marginBottom: '15px', border: '2px solid #27AE60' }}>
+                        <p style={{ color: '#27AE60', fontWeight: 'bold', margin: 0 }}>✅ ヒントを投稿済みです</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p style={{ color: '#F39C12', fontWeight: 'bold', marginBottom: '15px' }}>
+                          このお題を当てるようにヒントを出してください（文字数が少ないほど高得点！）
+                        </p>
+                        <textarea
+                          value={hintText}
+                          onChange={(e) => setHintText(e.target.value)}
+                          placeholder="ヒントを入力..."
+                          style={{
+                            width: '100%',
+                            minHeight: '80px',
+                            padding: '12px',
+                            marginBottom: '10px',
+                            border: '2px solid #ddd',
+                            borderRadius: '6px',
+                            fontSize: '1rem',
+                            fontFamily: 'inherit',
+                            resize: 'vertical',
+                          }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', fontSize: '0.9rem', color: '#2C3E50' }}>
+                          <span>文字数: {hintText.length}</span>
+                          {hintText.length > 0 && (
+                            <span style={{ color: '#F39C12', fontWeight: 'bold' }}>
+                              予想スコア: {Math.ceil((18 - hintText.length) / (sortedHints.length + 1))}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={submitHint}
+                          disabled={!hintText.trim()}
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            background: hintText.trim() ? '#F39C12' : '#ccc',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: hintText.trim() ? 'pointer' : 'not-allowed',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          ヒントを投稿
+                        </button>
+                      </div>
+                    )}
+
+                    {sortedHints.length > 0 && (
+                      <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '2px solid #ddd' }}>
+                        <h4 style={{ color: '#2C3E50', marginBottom: '10px' }}>投稿されたヒント（文字数順）</h4>
+                        {sortedHints.map((hint, idx) => (
                       <div
                         key={idx}
                         style={{
@@ -1223,7 +1308,9 @@ const DenpouApp = () => {
                         </div>
                       </div>
                     ))}
-                  </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
