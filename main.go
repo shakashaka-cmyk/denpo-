@@ -451,7 +451,20 @@ func RevealNextHint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentRound := &room.Game.Rounds[len(room.Game.Rounds)-1]
+	// 実行中のラウンドを探す
+	var currentRound *Round
+	for i := range room.Game.Rounds {
+		if room.Game.Rounds[i].Status == "hint_phase" {
+			currentRound = &room.Game.Rounds[i]
+			break
+		}
+	}
+
+	if currentRound == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("No active round\n"))
+		return
+	}
 
 	// ヒントを文字数でソート
 	sortHints(currentRound.Hints)
