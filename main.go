@@ -408,7 +408,6 @@ func SubmitHint(w http.ResponseWriter, r *http.Request) {
 		round := &room.Game.Rounds[i]
 		if round.Status == "hint_phase" && round.ParentID != playerID {
 			// このラウンドに投稿
-			isPlayerParent = false
 			hint := Hint{
 				PlayerID:   playerID,
 				PlayerName: playerName,
