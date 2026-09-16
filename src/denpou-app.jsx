@@ -16,6 +16,7 @@ const DenpouApp = () => {
   const [playerName, setPlayerName] = useState('');
   const [isParent, setIsParent] = useState(false);
   const [gameMode, setGameMode] = useState('pokemon');
+  const [answerMode, setAnswerMode] = useState('random');
   const [showModeSelect, setShowModeSelect] = useState(false);
   const [answerFeedback, setAnswerFeedback] = useState('');
 
@@ -69,9 +70,17 @@ const DenpouApp = () => {
           // 現在のラウンドが終了したか確認
           if (appState === 'game' && currentRound < updatedGame.rounds.length) {
             const currentRoundData = updatedGame.rounds[currentRound];
-            if (currentRoundData?.status === 'finished' && currentRound < updatedGame.rounds.length - 1) {
-              // 次のラウンドへ自動進行
-              setCurrentRound(currentRound + 1);
+            if (currentRoundData?.status === 'finished') {
+              // ラウンド終了画面を表示（3秒後に次のラウンドへ）
+              setAppState('round_result');
+              setTimeout(() => {
+                if (currentRound < updatedGame.rounds.length - 1) {
+                  setCurrentRound(currentRound + 1);
+                  setAppState('game');
+                } else {
+                  setAppState('result');
+                }
+              }, 3000);
             }
           }
 
@@ -108,7 +117,7 @@ const DenpouApp = () => {
       const response = await fetch(`${API_BASE}/games`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: parentName, mode: gameMode }),
+        body: JSON.stringify({ name: parentName, mode: gameMode, answerMode: answerMode }),
       });
       const gameData = await response.json();
       
@@ -257,6 +266,146 @@ const DenpouApp = () => {
     }
   };
 
+  const submitTopic = async (topic) => {
+    if (!topic.trim()) {
+      setErrorMsg('お題を入力してください');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/games/${gameID}/topic`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Player-ID': playerID,
+        },
+        body: JSON.stringify({ topic: topic }),
+      });
+
+      if (!response.ok) {
+        setErrorMsg('失敗しました');
+        return;
+      }
+
+      const updatedGame = await response.json();
+      setGame(updatedGame);
+      setHintText('');
+      setErrorMsg('');
+    } catch (err) {
+      setErrorMsg('失敗しました');
+    }
+  };
+
+  const [topicInput, setTopicInput] = useState('');
+
+  // ゲーム開始前：子のお題決定画面
+  if (appState === 'game' && game && game.status === 'playing') {
+    const activeRound = game.rounds.find(r => r.status === 'hint_phase');
+    
+    // manuel モードで、お題がまだ決まってない場合
+    if (activeRound && activeRound.answerMode === 'manual' && !activeRound.answer && playerID !== activeRound.parentId) {
+      return (
+        <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px', textAlign: 'center', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <h1 style={{ fontSize: '2rem', color: '#E74C3C', marginBottom: '30px' }}>
+            このラウンドのお題を決めますか？
+          </h1>
+
+          <div style={{ background: '#fff', padding: '30px', borderRadius: '12px', boxShadow: '0 10px 40px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+              <button
+                onClick={() => setTopicInput('random')}
+                style={{
+                  padding: '20px',
+                  border: topicInput === 'random' ? '3px solid #F39C12' : '2px solid #ddd',
+                  background: topicInput === 'random' ? '#FFF8E7' : '#fff',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '1rem',
+                  color: '#2C3E50',
+                }}
+              >
+                🎲 ランダムで決まるまで待つ
+              </button>
+              <button
+                onClick={() => setTopicInput('manual')}
+                style={{
+                  padding: '20px',
+                  border: topicInput === 'manual' ? '3px solid #F39C12' : '2px solid #ddd',
+                  background: topicInput === 'manual' ? '#FFF8E7' : '#fff',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '1rem',
+                  color: '#2C3E50',
+                }}
+              >
+                ✍️ 自分で入力する
+              </button>
+            </div>
+
+            {topicInput === 'manual' && (
+              <div>
+                <input
+                  type="text"
+                  value={hintText}
+                  onChange={(e) => setHintText(e.target.value)}
+                  placeholder="お題を入力"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '2px solid #ddd',
+                    borderRadius: '6px',
+                    fontSize: '1rem',
+                    marginBottom: '15px',
+                  }}
+                />
+                <button
+                  onClick={() => submitTopic(hintText)}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: '#27AE60',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                  }}
+                >
+                  決定
+                </button>
+              </div>
+            )}
+
+            {topicInput === 'random' && (
+              <p style={{ color: '#7F8C8D', fontSize: '1rem' }}>
+                他の人がお題を決めるまで待機中...
+              </p>
+            )}
+          </div>
+
+          {errorMsg && (
+            <div style={{ color: '#E74C3C', fontWeight: 'bold' }}>
+              {errorMsg}
+            </div>
+          )}
+        </div>
+      );
+    }
+  }
+
+  // 通常のゲーム画面に戻る
+  if (appState === 'game') {
+    const updatedGame = await response.json();
+      setGame(updatedGame);
+      setHintText('');
+      setErrorMsg('');
+    } catch (err) {
+      setErrorMsg('失敗しました');
+    }
+  };
+
   const revealNextHint = async () => {
     try {
       const response = await fetch(`${API_BASE}/games/${gameID}/reveal`, {
@@ -378,6 +527,44 @@ const DenpouApp = () => {
               >
                 🌍 一般モード
               </button>
+            </div>
+
+            <div style={{ marginBottom: '30px' }}>
+              <h3 style={{ marginBottom: '15px', color: '#2C3E50' }}>お題決定方式</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <button
+                  onClick={() => setAnswerMode('random')}
+                  style={{
+                    padding: '20px',
+                    border: answerMode === 'random' ? '3px solid #F39C12' : '2px solid #ddd',
+                    background: answerMode === 'random' ? '#FFF8E7' : '#fff',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    fontSize: '1rem',
+                    color: '#2C3E50',
+                    transition: 'all 0.3s',
+                  }}
+                >
+                  🎲 ランダム
+                </button>
+                <button
+                  onClick={() => setAnswerMode('manual')}
+                  style={{
+                    padding: '20px',
+                    border: answerMode === 'manual' ? '3px solid #F39C12' : '2px solid #ddd',
+                    background: answerMode === 'manual' ? '#FFF8E7' : '#fff',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    fontSize: '1rem',
+                    color: '#2C3E50',
+                    transition: 'all 0.3s',
+                  }}
+                >
+                  ✍️ 自分で決める
+                </button>
+              </div>
             </div>
 
             <div style={{ marginBottom: '15px' }}>
@@ -1117,6 +1304,89 @@ const DenpouApp = () => {
             )}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // ラウンド結果画面
+  if (appState === 'round_result' && game && currentRound < game.rounds.length) {
+    const roundData = game.rounds[currentRound];
+    const roundNumber = roundData?.roundNumber;
+    
+    return (
+      <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px', textAlign: 'center', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <h1 style={{ fontSize: '2rem', color: '#E74C3C', marginBottom: '20px' }}>
+          ラウンド {roundNumber} 終了！
+        </h1>
+
+        <div style={{ background: '#fff', padding: '30px', borderRadius: '12px', boxShadow: '0 10px 40px rgba(0,0,0,0.1)', marginBottom: '20px' }}>
+          {roundData?.correctAnswer ? (
+            <>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#27AE60', marginBottom: '20px' }}>
+                ✅ 正解！
+              </div>
+              <div style={{ fontSize: '1.2rem', color: '#2C3E50', marginBottom: '20px' }}>
+                お題：「{roundData.answer}」
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#E74C3C', marginBottom: '20px' }}>
+              ❌ ハズレ
+            </div>
+          )}
+
+          <div style={{ background: '#FFF3CD', padding: '15px', borderRadius: '6px', marginBottom: '20px' }}>
+            <h3 style={{ color: '#F39C12', marginBottom: '15px' }}>このラウンドの獲得ポイント</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {game.players.filter(p => !p.isKicked).map((player) => {
+                const points = roundData?.scores[player.playerId] || 0;
+                return (
+                  <div
+                    key={player.playerId}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      padding: '10px',
+                      background: '#fff',
+                      borderRadius: '4px',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    <span>{player.name}</span>
+                    <span style={{ color: points > 0 ? '#27AE60' : '#7F8C8D', fontSize: '1.2rem' }}>
+                      {points > 0 ? '+' : ''}{points}点
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{ background: '#ECF0F1', padding: '15px', borderRadius: '6px' }}>
+            <h3 style={{ color: '#2C3E50', marginBottom: '10px' }}>現在の総得点</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {game.players.filter(p => !p.isKicked).map((player) => (
+                <div
+                  key={player.playerId}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '8px',
+                  }}
+                >
+                  <span style={{ fontWeight: 'bold', color: '#2C3E50' }}>{player.name}</span>
+                  <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#E74C3C' }}>
+                    {player.totalScore}点
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <p style={{ color: '#7F8C8D', fontSize: '0.9rem' }}>
+          {currentRound < game.rounds.length - 1 ? `次のラウンドへ進みます...` : `ゲーム終了！`}
+        </p>
       </div>
     );
   }

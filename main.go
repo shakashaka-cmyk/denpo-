@@ -17,12 +17,13 @@ import (
 )
 
 type Game struct {
-	GameID    string       `json:"gameId"`
-	Players   []Player     `json:"players"`
-	Rounds    []Round      `json:"rounds"`
-	Status    string       `json:"status"`
-	Mode      string       `json:"mode"`
-	CreatedAt time.Time    `json:"createdAt"`
+	GameID     string       `json:"gameId"`
+	Players    []Player     `json:"players"`
+	Rounds     []Round      `json:"rounds"`
+	Status     string       `json:"status"`
+	Mode       string       `json:"mode"`
+	AnswerMode string       `json:"answerMode"` // "random" or "manual"
+	CreatedAt  time.Time    `json:"createdAt"`
 }
 
 type Player struct {
@@ -34,17 +35,19 @@ type Player struct {
 }
 
 type Round struct {
-	RoundNumber      int            `json:"roundNumber"`
-	ParentID         string         `json:"parentId"`
-	Answer           string         `json:"answer"`
-	Status           string         `json:"status"`
-	Hints            []Hint         `json:"hints"`
-	CorrectAnswer    bool           `json:"correctAnswer"`
-	Scores           map[string]int `json:"scores"`
-	CreatedAt        time.Time      `json:"createdAt"`
-	AnsweredAt       *time.Time     `json:"answeredAt"`
-	RevealedHintIdx  int            `json:"revealedHintIdx"`
-	CorrectHintIdx   int            `json:"correctHintIdx"`
+	RoundNumber       int            `json:"roundNumber"`
+	ParentID          string         `json:"parentId"`
+	Answer            string         `json:"answer"`
+	AnswerMode        string         `json:"answerMode"`   // "random" or "manual"
+	AnswerSource      string         `json:"answerSource"` // 親のID、お題を決めた子のID
+	Status            string         `json:"status"`
+	Hints             []Hint         `json:"hints"`
+	CorrectAnswer     bool           `json:"correctAnswer"`
+	Scores            map[string]int `json:"scores"`
+	CreatedAt         time.Time      `json:"createdAt"`
+	AnsweredAt        *time.Time     `json:"answeredAt"`
+	RevealedHintIdx   int            `json:"revealedHintIdx"`
+	CorrectHintIdx    int            `json:"correctHintIdx"`
 }
 
 type Hint struct {
@@ -155,6 +158,7 @@ func main() {
 	r.HandleFunc("/api/games/{gameId}/kick", KickPlayer).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}/hints", SubmitHint).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}/answer", SubmitAnswer).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/games/{gameId}/topic", SubmitTopic).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/games/{gameId}/reveal", RevealNextHint).Methods("POST", "OPTIONS")
 	r.Use(corsMiddleware)
 
@@ -201,8 +205,9 @@ func ListGames(w http.ResponseWriter, r *http.Request) {
 
 func CreateGame(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name string `json:"name"`
-		Mode string `json:"mode"`
+		Name       string `json:"name"`
+		Mode       string `json:"mode"`
+		AnswerMode string `json:"answerMode"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
 
@@ -220,9 +225,10 @@ func CreateGame(w http.ResponseWriter, r *http.Request) {
 				HintSubmitted: false,
 			},
 		},
-		Status:    "waiting",
-		Mode:      req.Mode,
-		CreatedAt: time.Now(),
+		Status:     "waiting",
+		Mode:       req.Mode,
+		AnswerMode: req.AnswerMode,
+		CreatedAt:  time.Now(),
 	}
 
 	roomsMu.Lock()
@@ -326,7 +332,10 @@ func StartGame(w http.ResponseWriter, r *http.Request) {
 	room.Game.Rounds = make([]Round, 0)
 	for i := 0; i < 2; i++ {
 		for _, player := range activePlayers {
-			answer := topics[rand.Intn(len(topics))]
+			answer := ""
+			if room.Game.AnswerMode == "random" {
+				answer = topics[rand.Intn(len(topics))]
+			}
 			
 			// 最初のラウンドだけ hint_phase、他は waiting
 			status := "waiting"
@@ -335,16 +344,18 @@ func StartGame(w http.ResponseWriter, r *http.Request) {
 			}
 			
 			round := Round{
-				RoundNumber:    len(room.Game.Rounds) + 1,
-				ParentID:       player.PlayerID,
-				Answer:         answer,
-				Status:         status,
-				Hints:          make([]Hint, 0),
-				CorrectAnswer:  false,
-				Scores:         make(map[string]int),
-				CreatedAt:      time.Now(),
+				RoundNumber:     len(room.Game.Rounds) + 1,
+				ParentID:        player.PlayerID,
+				Answer:          answer,
+				AnswerMode:      room.Game.AnswerMode,
+				AnswerSource:    "",
+				Status:          status,
+				Hints:           make([]Hint, 0),
+				CorrectAnswer:   false,
+				Scores:          make(map[string]int),
+				CreatedAt:       time.Now(),
 				RevealedHintIdx: -1,
-				CorrectHintIdx: -1,
+				CorrectHintIdx:  -1,
 			}
 			room.Game.Rounds = append(room.Game.Rounds, round)
 		}
@@ -356,6 +367,58 @@ func StartGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	room.Game.Status = "playing"
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(room.Game)
+}
+
+func SubmitTopic(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	gameID := vars["gameId"]
+	playerID := r.Header.Get("X-Player-ID")
+
+	var req struct {
+		Topic string `json:"topic"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+
+	roomsMu.RLock()
+	room, exists := rooms[gameID]
+	roomsMu.RUnlock()
+
+	if !exists {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	room.Mu.Lock()
+	defer room.Mu.Unlock()
+
+	if len(room.Game.Rounds) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// 実行中のラウンドを探す
+	var currentRound *Round
+	for i := range room.Game.Rounds {
+		if room.Game.Rounds[i].Status == "hint_phase" {
+			currentRound = &room.Game.Rounds[i]
+			break
+		}
+	}
+
+	if currentRound == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("No active round\n"))
+		return
+	}
+
+	// manual モードで、お題がまだ決まってなかったら、このプレイヤーのお題を採用
+	if currentRound.AnswerMode == "manual" && currentRound.Answer == "" {
+		currentRound.Answer = req.Topic
+		currentRound.AnswerSource = playerID
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(room.Game)
