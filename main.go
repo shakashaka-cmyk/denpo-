@@ -588,6 +588,46 @@ func SubmitAnswer(w http.ResponseWriter, r *http.Request) {
 				room.Game.Players[i].HintSubmitted = false
 			}
 		}
+	} else {
+		// ハズレ時：次のヒントを開示
+		sortHints(currentRound.Hints)
+		
+		nextIdx := currentRound.RevealedHintIdx + 1
+		if nextIdx < len(currentRound.Hints) {
+			// 次のヒントがあれば開示
+			currentRound.RevealedHintIdx = nextIdx
+		} else {
+			// ヒントがなくなったら、このラウンドを終了して次へ
+			currentRound.Status = "finished"
+			now := time.Now()
+			currentRound.AnsweredAt = &now
+			
+			// すべてのラウンドが終了したか確認
+			allFinished := true
+			for _, round := range room.Game.Rounds {
+				if round.Status != "finished" {
+					allFinished = false
+					break
+				}
+			}
+
+			if allFinished {
+				room.Game.Status = "finished"
+			} else {
+				// 次のラウンドを hint_phase に変更
+				for i := range room.Game.Rounds {
+					if room.Game.Rounds[i].Status == "waiting" {
+						room.Game.Rounds[i].Status = "hint_phase"
+						break
+					}
+				}
+				
+				// 全プレイヤーの HintSubmitted をリセット
+				for i := range room.Game.Players {
+					room.Game.Players[i].HintSubmitted = false
+				}
+			}
+		}
 	}
 
 	// 新しいラウンドが始まるときにリセット
